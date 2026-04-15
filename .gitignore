@@ -1,0 +1,39 @@
+# User requested & Python Bytecode
+config/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments (Specific to your setup)
+pytorch3d_env/
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution / Build
+dist/
+build/
+*.egg-info/
+
+# PyTorch / ML Models
+*.pth
+*.pt
+*.ckpt
+
+# PyQt / Qt specific
+*.qm
+*.pyui
+
+# Project specific outputs (e.g., from your save_image function)
+output.png
+*.jpg
+*.jpeg
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+#generated image
+
+generated_image/
