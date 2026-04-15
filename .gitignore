@@ -1,5 +1,4 @@
 # User requested & Python Bytecode
-config/
 __pycache__/
 *.py[cod]
 *$py.class
