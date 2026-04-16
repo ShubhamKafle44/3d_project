@@ -3,7 +3,6 @@
 A desktop application that combines real-time 3D rendering with adversarial machine learning attacks. It loads a 3D model (e.g. a Jeep), renders it using a differentiable renderer, classifies the render with a neural network, and then automatically manipulates the scene — position, rotation, lighting — to trick the classifier into seeing something completely different.
 
 ---
-
 ## What It Does
 
 Modern image classifiers (like those used in autonomous vehicles or security systems) can be fooled by subtle changes to an input image. This tool makes that process visual and interactive:
@@ -189,7 +188,7 @@ All key settings live in `config.py`:
 2. **Manual exploration** — drag the Position, Rotation, and Lighting sliders to see how the classifier reacts to different views
 3. **Auto-detect** — click **Detect Object** to classify the current view and automatically pick an adversarial target (the model's second-best guess)
 4. **Manual target** — type a class name (e.g. `warplane`, `cat`) in the Search box or use the spinner to pick any of the 1000 ImageNet classes
-5. **Run the attack** — click **▶ Start Optimisation**. The renderer will iteratively adjust the scene to fool the classifier. Watch the Target prob bar climb.
+5. **Run the attack** — click **Start Optimisation**. The renderer will iteratively adjust the scene to fool the classifier. Watch the Target prob bar climb.
 6. **Save** — adversarial images are saved automatically on success, or use **Save Image** at any time
 
 ---
