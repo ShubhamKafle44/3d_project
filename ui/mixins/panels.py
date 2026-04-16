@@ -222,4 +222,118 @@ class PanelsMixin:
         self._search_edit.setPlaceholderText("e.g. cat, tench, warplane…")
         self._search_edit.returnPressed.connect(self._on_search_class)
         search_row.addWidget(self._search_edit)
-        sb = QPushButton
+        sb = QPushButton("→")
+
+        sb.setFixedWidth(36)
+
+        sb.clicked.connect(self._on_search_class)
+
+        search_row.addWidget(sb)
+
+        ag.addLayout(search_row)
+
+
+        # Learning rate
+
+        lr_row = QHBoxLayout()
+
+        lr_row.setSpacing(8)
+
+        lr_row.addWidget(QLabel("Learning rate:"))
+
+        self._lr_spin = QDoubleSpinBox()
+
+        self._lr_spin.setRange(0.001, 1.0)
+
+        self._lr_spin.setSingleStep(0.005)
+
+        self._lr_spin.setValue(0.02)
+
+        self._lr_spin.setDecimals(3)
+
+        lr_row.addWidget(self._lr_spin)
+
+        ag.addLayout(lr_row)
+
+
+        # Max steps
+
+        steps_row = QHBoxLayout()
+
+        steps_row.setSpacing(8)
+
+        steps_row.addWidget(QLabel("Max steps:"))
+
+        self._steps_spin = QSpinBox()
+
+        self._steps_spin.setRange(10, 2000)
+
+        self._steps_spin.setValue(200)
+
+        steps_row.addWidget(self._steps_spin)
+
+        ag.addLayout(steps_row)
+
+
+        # Start / Stop
+
+        btn_row = QHBoxLayout()
+
+        btn_row.setSpacing(8)
+
+        self._start_btn = QPushButton("▶  Start Optimisation")
+
+        self._start_btn.setObjectName("start_btn")
+
+        self._start_btn.clicked.connect(self._on_start_optimise)
+
+        self._stop_btn = QPushButton("■  Stop")
+
+        self._stop_btn.setObjectName("stop_btn")
+
+        self._stop_btn.clicked.connect(self._on_stop_optimise)
+
+        self._stop_btn.setEnabled(False)
+
+        btn_row.addWidget(self._start_btn)
+
+        btn_row.addWidget(self._stop_btn)
+
+        ag.addLayout(btn_row)
+
+
+        self._step_label = QLabel("Step: —")
+
+        self._step_label.setStyleSheet(f"color:{TEXT_DIM}; font-size:12px;")
+
+        ag.addWidget(self._step_label)
+
+
+        self._prob_label = QLabel("Target prob: —")
+
+        self._prob_label.setObjectName("prob_label")
+
+        ag.addWidget(self._prob_label)
+
+
+        self._success_label = QLabel("")
+
+        self._success_label.setObjectName("success_label")
+
+        ag.addWidget(self._success_label)
+
+
+        self._saved_label = QLabel("")
+
+        self._saved_label.setWordWrap(True)
+
+        self._saved_label.setObjectName("warn_label")
+
+        ag.addWidget(self._saved_label)
+
+
+        layout.addWidget(adv_grp)
+
+        layout.addStretch()
+
+        return widget 
