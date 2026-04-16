@@ -214,7 +214,6 @@ numpy
 - Render time per step is dominated by PyTorch3D's rasterizer; a GPU reduces this from ~2s to ~100ms per step
 - The segmentation fault on startup is typically caused by a PyTorch3D/CUDA version mismatch. To solve the issue ensure your wheel matches your CUDA and PyTorch versions exactly
 
-## Demo Video
 
 ## Demo Video
 
