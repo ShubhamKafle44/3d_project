@@ -1,16 +1,16 @@
-# --Colour tokens --
-BG       = "#0d1117"  # Deep navy slate
-PANEL_BG = "#161b22"  # Lighter slate for depth
-BORDER   = "#30363d"  # Subtle grey-blue borders
-BORDER2  = "#21262d"  # Darker contrast border
-TEXT     = "#c9d1d9"  # High-readability off-white
-TEXT_DIM = "#8b949e"  # Muted grey for descriptions
-TEXT_SUB = "#58a6ff"  # Soft blue for headers (changed from dull slate)
-ACCENT   = "#58a6ff"  # AI Blue (Electric)
-ACCENT2  = "#bc8cff"  # Adversarial Purple (Soft Lavender)
-GRN      = "#3fb950"  # Success Emerald
-DANGER   = "#f85149"  # Alert Crimson
-WARN     = "#d29922"  # Warning Gold
+# -- Colour tokens --
+BG       = "#f6f8fa"  # GitHub-style light grey background
+PANEL_BG = "#ffffff"  # Pure white panels
+BORDER   = "#d0d7de"  # Soft grey borders
+BORDER2  = "#e8ecf0"  # Lighter inner borders
+TEXT     = "#1f2328"  # Near-black readable text
+TEXT_DIM = "#656d76"  # Muted grey for descriptions
+TEXT_SUB = "#0969da"  # Blue for headers
+ACCENT   = "#0969da"  # Primary blue
+ACCENT2  = "#8250df"  # Purple for adversarial
+GRN      = "#1a7f37"  # Success green
+DANGER   = "#cf222e"  # Alert red
+WARN     = "#9a6700"  # Warning amber
 
 STYLESHEET = f"""
 QMainWindow, QWidget {{
@@ -29,6 +29,7 @@ QGroupBox {{
     font-weight: bold;
     letter-spacing: 1.5px;
     text-transform: uppercase;
+    background-color: {PANEL_BG};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
@@ -46,8 +47,8 @@ QSlider::handle:horizontal {{
     height: 16px;
     margin: -6px 0;
     border-radius: 8px;
-    background: {TEXT};
-    border: 2px solid {BG};
+    background: {ACCENT};
+    border: 2px solid {PANEL_BG};
 }}
 QSlider::sub-page:horizontal {{
     background: {ACCENT};
@@ -62,45 +63,46 @@ QPushButton {{
     font-size: 13px;
     font-weight: 500;
 }}
-QPushButton:hover   {{ 
-    border-color: {TEXT_DIM}; 
-    background-color: #21262d; 
+QPushButton:hover {{
+    border-color: {ACCENT};
+    background-color: #f3f8ff;
 }}
-QPushButton:pressed {{ 
-    background-color: #0d1117; 
+QPushButton:pressed {{
+    background-color: {BORDER2};
 }}
 QPushButton#detect_btn {{
-    background-color: #121d2f;
-    border-color: #1f3a5f;
+    background-color: #dbeafe;
+    border-color: #93c5fd;
     color: {ACCENT};
     font-weight: bold;
 }}
-QPushButton#detect_btn:hover {{ 
-    background-color: #16263f; 
-    border-color: {ACCENT}; 
+QPushButton#detect_btn:hover {{
+    background-color: #bfdbfe;
+    border-color: {ACCENT};
 }}
 QPushButton#start_btn {{
-    background-color: #0f1c14;
-    border-color: #1b3a24;
+    background-color: #dcfce7;
+    border-color: #86efac;
     color: {GRN};
     font-weight: bold;
 }}
-QPushButton#start_btn:hover {{ 
-    background-color: #142a1d; 
-    border-color: {GRN}; 
+QPushButton#start_btn:hover {{
+    background-color: #bbf7d0;
+    border-color: {GRN};
 }}
 QPushButton#stop_btn {{
-    background-color: #211314;
-    border-color: #442326;
+    background-color: #fee2e2;
+    border-color: #fca5a5;
     color: {DANGER};
     font-weight: bold;
 }}
-QPushButton#stop_btn:hover {{ 
-    background-color: #2d191b; 
-    border-color: {DANGER}; 
+QPushButton#stop_btn:hover {{
+    background-color: #fecaca;
+    border-color: {DANGER};
 }}
 QLabel {{
     font-size: 13px;
+    color: {TEXT};
 }}
 QLabel#value_label   {{ color: {ACCENT}; min-width: 48px; font-family: "Consolas"; }}
 QLabel#prob_label    {{ color: {ACCENT2}; font-size: 15px; font-weight: bold; }}
@@ -113,9 +115,9 @@ QProgressBar {{
     color: transparent;
     height: 4px;
 }}
-QProgressBar::chunk {{ 
-    background-color: {ACCENT}; 
-    border-radius: 2px; 
+QProgressBar::chunk {{
+    background-color: {ACCENT};
+    border-radius: 2px;
 }}
 QStatusBar {{
     background: {PANEL_BG};
@@ -123,12 +125,12 @@ QStatusBar {{
     border-top: 1px solid {BORDER};
     font-size: 11px;
 }}
-QScrollArea {{ 
-    border: none; 
-    background: transparent; 
+QScrollArea {{
+    border: none;
+    background: transparent;
 }}
 QLineEdit, QSpinBox, QDoubleSpinBox {{
-    background: #0d1117;
+    background: {PANEL_BG};
     border: 1px solid {BORDER};
     border-radius: 5px;
     padding: 6px 10px;
@@ -137,10 +139,10 @@ QLineEdit, QSpinBox, QDoubleSpinBox {{
 }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
-    background: #161b22;
+    background: #f0f6ff;
 }}
-QSplitter::handle {{ 
-    background: {BORDER}; 
+QSplitter::handle {{
+    background: {BORDER};
 }}
 QScrollBar:vertical {{
     background: transparent;
@@ -152,8 +154,8 @@ QScrollBar::handle:vertical {{
     border-radius: 4px;
     min-height: 30px;
 }}
-QScrollBar::handle:vertical:hover {{ 
-    background: {TEXT_DIM}; 
+QScrollBar::handle:vertical:hover {{
+    background: {TEXT_DIM};
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 """
