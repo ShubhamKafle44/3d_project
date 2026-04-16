@@ -18,7 +18,7 @@ yacs
 portalocker
 tabulate
 
-# GUI (if you're using PyQt)
+# GUI 
 PyQt6==6.11.0
 PyQt6-Qt6==6.11.0
 PyQt6_sip==13.11.1
