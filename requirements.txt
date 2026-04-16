@@ -1,0 +1,24 @@
+torch==2.1.2
+torchvision==0.16.2
+torchaudio==2.1.2
+
+numpy==1.26.4
+pillow
+PyYAML
+requests
+tqdm
+networkx
+sympy
+
+# 3D / ML stack
+pytorch3d==0.7.8
+fvcore
+iopath
+yacs
+portalocker
+tabulate
+
+# GUI (if you're using PyQt)
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.0
+PyQt6_sip==13.11.1
