@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 class MeshScene:
     """Wraps a PyTorch3D renderer and exposes differentiable scene parameters."""
 
-    def __init__(self, device: torch.device):
+    def __init__(self, meshes:None, device: torch.device):
         self.device = device
 
         # Placeholder for our 3D object once it's loaded
-        self.mesh = None
+        self.mesh = meshes
 
         # Set up the virtual camera and the engine that draws the 3D model
         self.renderer, self.cameras = self._build_renderer()

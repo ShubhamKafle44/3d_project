@@ -2,95 +2,101 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from PIL import Image as PILImage
+
+from PyQt6.QtGui  import QImage, QPixmap
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap
+
+import config
 
 
 class RenderViewMixin:
-    """Handles rendering, image display, prediction bars, and slider sync."""
 
-    def _refresh_render(self) -> None:
-        """Re-render the scene and refresh all classifier prediction bars."""
-        # We use torch.no_grad() because this is just for display; 
-        # we don't need to keep track of math history for gradients here.
-        with torch.no_grad():
-            # Get the current 3D view as both a numpy image and a torch tensor
-            img_np, img_t = self.scene.render()
-            
-        # Push the picture to the screen
-        self._show_image(img_np)
-        
-        # Ask the Model what it sees in the new image and update the result bars
-        self._update_predictions(self.classifier.top_predictions(img_t))
+    # ──────────────────────────────────────────────────────────────────────────
+    def _render_and_display(self):
+        """Render scene → optionally replace with static image → classify → show."""
 
-    def _show_image(self, img_np: np.ndarray) -> None:
-        """Convert a float32 HxWx3 array to QPixmap and display it."""
-        # Convert the raw 0.0-1.0 math numbers into standard 0-255 colors (integers)
-        img_u8 = (np.clip(img_np, 0, 1) * 255).astype(np.uint8)
-        h, w, c = img_u8.shape
-        
-        # Turn the raw data into a format that the windowing system understands
-        q_img   = QImage(img_u8.tobytes(), w, h, w * c, QImage.Format.Format_RGB888)
-        pixmap  = QPixmap.fromImage(q_img)
-        
-        # Scale the image so it fits nicely in our window without looking stretched
-        self.render_label.setPixmap(
-            pixmap.scaled(
-                self.render_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        # 1. Always render the 3-D scene.
+        #    scene.render() returns (img_np, img_t) — unpack the tuple.
+        img_np, _img_t = self.scene.render()   # img_np: (H, W, 3) float32 [0,1]
+        self._last_render = img_np             # kept for Save button & optimiser
+
+        # 2. Decide which image to display & classify
+        static_path = getattr(self, "_static_image_path", None)
+        if static_path is not None:
+            try:
+                display_np = (
+                    np.array(PILImage.open(static_path).convert("RGB"))
+                    .astype(np.float32) / 255.0
+                )
+            except Exception:
+                display_np = img_np            # fall back to render on I/O error
+        else:
+            display_np = img_np
+
+        # 3. Show in the centre panel
+        self._show_numpy(display_np)
+
+        # 4. Classify and update the right-hand prediction bars
+        img_tensor = torch.from_numpy(display_np).to(config.device)
+        results    = self.classifier.classify(img_tensor)
+        self._update_predictions(results)
+
+    # ──────────────────────────────────────────────────────────────────────────
+    def _refresh_render(self):
+        """Called by slider callbacks — just re-render without re-classifying
+        on every tiny slider tick to keep the UI snappy.
+        Full classify only happens when the user clicks Detect or changes a
+        dropdown.  Override this method to add throttling / debouncing."""
+        self._render_and_display()
+
+    # ──────────────────────────────────────────────────────────────────────────
+    def _show_numpy(self, img: np.ndarray):
+        """Convert (H, W, 3) float32 [0,1] → QPixmap and paint render_label."""
+        rgb8  = (img.clip(0.0, 1.0) * 255).astype(np.uint8)
+        h, w, _ = rgb8.shape
+        qimg    = QImage(rgb8.tobytes(), w, h, 3 * w, QImage.Format.Format_RGB888)
+        pixmap  = QPixmap.fromImage(qimg).scaled(
+            self.render_label.width(),
+            self.render_label.height(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
         )
-        
-        # Keep a copy of the latest image in case the user wants to hit "Save"
-        self._last_img_np = img_np.copy()
+        self.render_label.setPixmap(pixmap)
 
-    def _update_predictions(self, top5: list[tuple[str, float]]) -> None:
-        """Populate the five prediction rows with labels and confidence bars."""
-        # Loop through our five UI result rows and fill them with the AI's guesses
-        for i, (name_lbl, bar) in enumerate(self._pred_labels):
-            if i < len(top5):
-                label, prob = top5[i]
-                # Cut the label text if it's too long, then set the bar to show the %
-                name_lbl.setText(label[:28])
-                bar.setValue(int(prob * 100))
-                bar.setFormat(f"{prob * 100:.1f}%")
-            else:
-                # If there are fewer than 5 results, clear the leftover rows
-                name_lbl.setText("—")
-                bar.setValue(0)
-                bar.setFormat("")
+    # ──────────────────────────────────────────────────────────────────────────
+    def _update_predictions(self, results: list[tuple[str, float]]):
+        """Populate the five prediction label + progress-bar pairs."""
+        for i, (label, prob) in enumerate(results[:5]):
+            self.pred_labels[i].setText(f"{label}  {prob * 100:.1f}%")
+            self.pred_bars[i].setValue(int(prob * 100))
+        for i in range(len(results), 5):
+            self.pred_labels[i].setText("—")
+            self.pred_bars[i].setValue(0)
 
-    def _sync_sliders(self) -> None:
-        """Move sliders to match current (post-optimisation) scene parameters."""
-        # Pull the values out of the 3D math engine (PyTorch)
-        # We detach them to make sure we're just getting the current values
-        pos = self.scene.pos.detach().cpu()
-        rot = self.scene.rot.detach().cpu()
-        amb = float(self.scene.ambient_intensity.item())
-        lp  = self.scene.light_pos.detach().cpu().squeeze()
+    # ──────────────────────────────────────────────────────────────────────────
+    def _sync_sliders(self):
+        """Push current scene tensor values back into the UI sliders.
+        Called after each optimisation step so the sliders reflect the
+        adversarially optimised pose / lighting."""
+        with torch.no_grad():
+            pos  = self.scene.pos.cpu().tolist()
+            rot  = self.scene.rot.cpu().tolist()
+            lpos = self.scene.light_pos[0].cpu().tolist()
+            amb  = self.scene.ambient_intensity.item()
 
-        # Update Position and Rotation sliders
-        for i, ax in enumerate(["X", "Y", "Z"]):
-            for slider_dict, vals in (
-                (self._pos_sliders, pos),
-                (self._rot_sliders, rot),
-            ):
-                s = slider_dict[ax]
-                # CRITICAL: We block signals here so the slider doesn't trigger 
-                # a "value changed" event and start an infinite loop of updates.
-                s.blockSignals(True)
-                s.setValue(s._to_s(vals[i].item())) # Convert math value back to slider steps
-                s.blockSignals(False)
-
-        # Update the Ambient Light slider
-        self._ambient_slider.blockSignals(True)
-        self._ambient_slider.setValue(self._ambient_slider._to_s(amb))
-        self._ambient_slider.blockSignals(False)
-
-        # Update the Light Position (LX, LY, LZ) sliders
-        for i, k in enumerate(["LX", "LY", "LZ"]):
-            s = self._lp_sliders[k]
-            s.blockSignals(True)
-            s.setValue(s._to_s(lp[i].item()))
-            s.blockSignals(False)
+        for slider, val in [
+            (self.slider_px, pos[0]),
+            (self.slider_py, pos[1]),
+            (self.slider_pz, pos[2]),
+            (self.slider_rx, rot[0]),
+            (self.slider_ry, rot[1]),
+            (self.slider_rz, rot[2]),
+            (self.slider_lx, lpos[0]),
+            (self.slider_ly, lpos[1]),
+            (self.slider_lz, lpos[2]),
+            (self.slider_amb, amb),
+        ]:
+            slider.blockSignals(True)
+            slider.setValue(slider._to_s(val))
+            slider.blockSignals(False)

@@ -1,122 +1,159 @@
 from __future__ import annotations
 
-import logging
-import os
+from pathlib import Path
 
 import numpy as np
-from PyQt6.QtWidgets import QFileDialog
+import torch
+from PIL import Image
+from PyQt6.QtWidgets import QMessageBox
 
-from core.classifier import IMAGENET_LABELS
-
-# Standard logger setup to track what the user is doing in the background
-logger = logging.getLogger(__name__)
+import config
 
 
 class ActionsMixin:
-    """Button-triggered actions: detect, load mesh, save image, class search."""
 
-    def _on_detect(self) -> None:
-        """
-        1. Classify the current render.
-        2. Pick the second-best class as the adversarial target.
-        3. Auto-start optimisation.
-        """
-        # Clear out any old status messages before starting a new run
-        self._success_label.setText("")
-        self._saved_label.setText("")
+    # ──────────────────────────────────────────────────────────────────────────
+    # Button wiring
+    # ──────────────────────────────────────────────────────────────────────────
 
-        # Grab the latest frame from our 3D scene and display it in the UI
-        img_np, img_t = self.scene.render()
-        self._show_image(img_np)
+    def _connect_actions(self):
+        self.btn_detect.clicked.connect(self._on_detect)
+        self.btn_save.clicked.connect(self._on_save)
+        self.btn_start.clicked.connect(self._on_start_optimise)
+        self.btn_stop.clicked.connect(self._on_stop_optimise)
+        self.btn_search.clicked.connect(self._on_search_class)
 
-        # Ask the model what it thinks it sees (returns the top 5 guesses)
-        top5 = self.classifier.top_predictions(img_t)
-        self._update_predictions(top5)
+    # ──────────────────────────────────────────────────────────────────────────
+    # Original button handlers
+    # ──────────────────────────────────────────────────────────────────────────
 
-        if not top5:
-            self.status_bar.showMessage("Classifier returned no results.")
+    def _on_detect(self):
+        img = self._current_classify_tensor()
+        if img is None:
             return
+        results = self.classifier.classify(img)
+        self._update_predictions(results)
+        # Auto-set adversarial target to the second-best prediction
+        if len(results) > 1:
+            idx = self._label_to_index(results[1][0])
+            if idx is not None:
+                self.target_spin.setValue(idx)
 
-        # Figure out the current #1 guess
-        top_label, top_prob = top5[0]
-        self._original_top_class = self.classifier.top_class_index(img_t)
-        logger.info("Detect — top prediction: %s (%.2f%%)", top_label, top_prob * 100)
-        self.status_bar.showMessage(
-            f"Detected: {top_label}  ({top_prob * 100:.1f}%)  |  selecting adversarial target…"
-        )
-
-        # ADVERSARIAL LOGIC: 
-        # We want to trick the AI. The easiest way is to pick its 'second' guess 
-        # and try to make that become the 'first' guess.
-        if len(top5) > 1:
-            adv_label, _ = top5[1]
-            # Find the ID number of that second-place label
-            adv_idx = next(
-                (i for i, n in enumerate(IMAGENET_LABELS) if n == adv_label),
-                (self._original_top_class + 1) % 1000,
-            )
-        else:
-            # If it only has one guess, just pick the next ID in the list as the target
-            adv_idx   = (self._original_top_class + 1) % 1000
-            adv_label = IMAGENET_LABELS[adv_idx]
-
-        # Update the target selector in the UI so the user sees what we're aiming for
-        self._target_spin.setValue(adv_idx)
-        self._target_name.setText(adv_label)
-        logger.info("Adversarial target: [%d] %s", adv_idx, adv_label)
-
-        # Immediately kick off the math loop to start changing the 3D scene
-        self._on_start_optimise()
-
-    def _on_load_mesh(self) -> None:
-        """Opens a standard Windows/Mac/Linux file picker to find a 3D .obj file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Open OBJ Mesh", "", "OBJ Files (*.obj);;All Files (*)"
-        )
-        if path:
-            # Tell the 3D scene to throw out the old model and load the new one
-            self.scene.load_mesh(path)
-            self._refresh_render()
-            self.status_bar.showMessage(
-                f"Device: {self.device}  |  Loaded: {os.path.basename(path)}"
-            )
-
-    def _on_save_image(self) -> None:
-        """Triggered when the user clicks 'Save'. Asks where to put the file."""
-        if self._last_img_np is None:
+    def _on_save(self):
+        img_np = getattr(self, "_last_render", None)
+        if img_np is None:
             return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Image", "render.png", "PNG (*.png);;JPEG (*.jpg)"
-        )
-        if path:
-            # Take the data currently in memory and write it to the hard drive
-            self._save_numpy_image(self._last_img_np, path)
-            self.status_bar.showMessage(f"Saved → {path}")
+        path = "adversarial_output.png"
+        Image.fromarray(
+            (img_np * 255).clip(0, 255).astype(np.uint8)
+        ).save(path)
+        self.status_label.setText(f"Saved → {path}")
 
-    def _save_numpy_image(self, img_np: np.ndarray, path: str) -> None:
-        """Helper to convert raw math numbers into a real image file (0.0-1.0 -> 0-255)."""
-        from PIL import Image as PILImage
-        # Clip ensures no numbers go below 0 or above 1 before we multiply by 255
-        img_u8 = (np.clip(img_np, 0, 1) * 255).astype(np.uint8)
-        PILImage.fromarray(img_u8).save(path)
-        logger.info("Image saved: %s", path)
-
-    def _on_target_changed(self, idx: int) -> None:
-        """Updates the text label whenever the user manually spins the target ID box."""
-        if idx < len(IMAGENET_LABELS):
-            self._target_name.setText(IMAGENET_LABELS[idx])
-
-    def _on_search_class(self) -> None:
-        """Allows the user to type 'Dog' and automatically find the right ImageNet ID."""
-        query = self._search_edit.text().strip().lower()
-        if not query:
-            return
-        
-        # Loop through all 1000 categories to find a name match
-        for i, name in enumerate(IMAGENET_LABELS):
-            if query in name.lower():
-                # Update the spin box, which will trigger _on_target_changed too
-                self._target_spin.setValue(i)
+    def _on_search_class(self):
+        query = self.target_search.text().strip().lower()
+        for idx, label in enumerate(self.classifier.categories):
+            if query in label.lower():
+                self.target_spin.setValue(idx)
+                self.status_label.setText(f"Found: {label} (#{idx})")
                 return
-        
-        self.status_bar.showMessage(f"No class matched '{query}'")
+        self.status_label.setText(f"No class matching '{query}'")
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # NEW: Dropdown handlers
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _on_3d_model_changed(self, index: int):
+        """Load the OBJ at AVAILABLE_3D_MODELS[index] into the scene."""
+        label, obj_path = config.AVAILABLE_3D_MODELS[index]
+
+        if not Path(obj_path).exists():
+            QMessageBox.warning(
+                self, "Model not found",
+                f"OBJ file not found:\n{obj_path}\n\n"
+                "Add the file to your models/ directory and try again.",
+            )
+            # Revert combo to the last successfully loaded index
+            self.combo_3d_model.blockSignals(True)
+            self.combo_3d_model.setCurrentIndex(self._current_3d_model_index)
+            self.combo_3d_model.blockSignals(False)
+            return
+
+        self._current_3d_model_index = index
+        self.status_label.setText(f"Loading 3D model: {label}…")
+        try:
+            # MeshScene.load_mesh(path) is the real method from renderer.py
+            self.scene.load_mesh(obj_path)
+            self._render_and_display()
+            self.status_label.setText(f"3D model: {label}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Load error", str(exc))
+            self.status_label.setText("Failed to load model.")
+
+    # ------------------------------------------------------------------
+    def _on_image_changed(self, index: int):
+        """Switch between live render and a static image file."""
+        label, img_path = config.AVAILABLE_IMAGES[index]
+        self._static_image_path = img_path   # None → live render
+
+        if img_path is None:
+            self.status_label.setText("Image input: live 3D render")
+        else:
+            if not Path(img_path).exists():
+                QMessageBox.warning(
+                    self, "Image not found",
+                    f"Image file not found:\n{img_path}",
+                )
+                self.combo_image.blockSignals(True)
+                self.combo_image.setCurrentIndex(0)   # revert to live render
+                self.combo_image.blockSignals(False)
+                self._static_image_path = None
+                return
+            self.status_label.setText(f"Image input: {Path(img_path).name}")
+
+        self._render_and_display()
+
+    # ------------------------------------------------------------------
+    def _on_vision_model_changed(self, index: int):
+        """Hot-swap the torchvision classifier backbone."""
+        label, model_key = config.AVAILABLE_VISION_MODELS[index]
+        self.status_label.setText(f"Loading vision model: {label}…")
+        try:
+            self.classifier.swap_model(model_key)
+            self.status_label.setText(f"Vision model: {label}")
+            self._render_and_display()
+        except Exception as exc:
+            QMessageBox.critical(self, "Model swap error", str(exc))
+            self.status_label.setText("Failed to load vision model.")
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Internal helpers
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _current_classify_tensor(self) -> torch.Tensor | None:
+        """Return the image tensor the classifier should process.
+
+        Priority:
+          1. static image path (set by Image Selector dropdown)
+          2. last rendered numpy frame stored in self._last_render
+        """
+        path = getattr(self, "_static_image_path", None)
+        if path is not None:
+            try:
+                arr = (
+                    np.array(Image.open(path).convert("RGB"))
+                    .astype(np.float32) / 255.0
+                )
+                return torch.from_numpy(arr).to(config.device)
+            except Exception:
+                pass  # fall through to render
+
+        img_np = getattr(self, "_last_render", None)
+        if img_np is None:
+            return None
+        return torch.from_numpy(img_np.astype(np.float32)).to(config.device)
+
+    def _label_to_index(self, label: str) -> int | None:
+        for i, cat in enumerate(self.classifier.categories):
+            if cat == label:
+                return i
+        return None
