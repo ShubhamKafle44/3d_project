@@ -43,6 +43,5 @@ AVAILABLE_IMAGES = [
 AVAILABLE_VISION_MODELS = [
     ("ViT-B/16 (default)",  "vit_b_16"),
     ("ResNet-50",           "resnet50"),
-    ("EfficientNet-B0",     "efficientnet_b0"),
     ("MobileNet-V3-Large",  "mobilenet_v3_large"),
 ]

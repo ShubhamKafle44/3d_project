@@ -93,7 +93,7 @@ class ActionsMixin:
     def _on_image_changed(self, index: int):
         """Switch between live render and a static image file."""
         label, img_path = config.AVAILABLE_IMAGES[index]
-        self._static_image_path = img_path   # None → live render
+        self._static_image_path = img_path   
 
         if img_path is None:
             self.status_label.setText("Image input: live 3D render")
