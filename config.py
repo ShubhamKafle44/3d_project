@@ -5,7 +5,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 OBJ_PATH        = "./models/Jeep/Jeep.obj"
-BACKGROUND_PATH = "./background/background.jpeg"
+BACKGROUND_PATH = "./background/background1.jpeg"
 
 # ── Renderer ───────────────────────────────────────────────────────────────────
 IMAGE_SIZE   = 512
@@ -26,15 +26,13 @@ AVAILABLE_3D_MODELS = [
     ("Jeep",   "./models/Jeep/Jeep.obj"),
     ("Chair",  "./models/Chair/Chair.obj"),
     ("Plane",  "./models/Airbus/Airbus A310.obj"),
+    {"Person", "./models/Person/Person.obj"}
 ]
 
 # ── Registry: available input images ──────────────────────────────────────────
-# Each entry: (display_label, path_or_None)
-# None means "use the live PyTorch3D render" — the default behaviour.
 AVAILABLE_IMAGES = [
-    ("Rendered 3D scene", None),
-    ("Background only",   "./background/background1.jpeg"),
-    ("Custom image",      "./background/background.jpeg"),
+    ("Background 1", "./background/background1.jpeg"),
+    ("Background 2", "./background/background2.jpeg"),
 ]
 
 # ── Registry: available vision / classifier models ────────────────────────────

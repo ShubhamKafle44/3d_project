@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from PIL import Image as PILImage
 
 from PyQt6.QtGui  import QImage, QPixmap
 from PyQt6.QtCore import Qt
@@ -12,61 +11,41 @@ import config
 
 class RenderViewMixin:
 
-    # ──────────────────────────────────────────────────────────────────────────
     def _render_and_display(self):
-        """Render scene → optionally replace with static image → classify → show."""
+        """Render the 3-D scene (with current background) → display → classify."""
 
-        # 1. Always render the 3-D scene.
-        #    scene.render() returns (img_np, img_t) — unpack the tuple.
-        img_np, _img_t = self.scene.render()   # img_np: (H, W, 3) float32 [0,1]
-        self._last_render = img_np             # kept for Save button & optimiser
+        img_np, _img_t = self.scene.render()   # (H, W, 3) float32 [0,1]
+        self._last_render = img_np
 
-        # 2. Decide which image to display & classify
-        static_path = getattr(self, "_static_image_path", None)
-        if static_path is not None:
-            try:
-                display_np = (
-                    np.array(PILImage.open(static_path).convert("RGB"))
-                    .astype(np.float32) / 255.0
-                )
-            except Exception:
-                display_np = img_np            # fall back to render on I/O error
-        else:
-            display_np = img_np
+        self._show_numpy(img_np)
 
-        # 3. Show in the centre panel
-        self._show_numpy(display_np)
-
-        # 4. Classify and update the right-hand prediction bars
-        img_tensor = torch.from_numpy(display_np).to(config.device)
+        img_tensor = torch.from_numpy(img_np).to(config.device)
         results    = self.classifier.classify(img_tensor)
         self._update_predictions(results)
 
-    # ──────────────────────────────────────────────────────────────────────────
     def _refresh_render(self):
-        """Called by slider callbacks — just re-render without re-classifying
-        on every tiny slider tick to keep the UI snappy.
-        Full classify only happens when the user clicks Detect or changes a
-        dropdown.  Override this method to add throttling / debouncing."""
+        """Called by slider callbacks to redraw without reclassifying."""
         self._render_and_display()
-
-    # ──────────────────────────────────────────────────────────────────────────
+        
     def _show_numpy(self, img: np.ndarray):
         """Convert (H, W, 3) float32 [0,1] → QPixmap and paint render_label."""
-        rgb8  = (img.clip(0.0, 1.0) * 255).astype(np.uint8)
+        rgb8    = (img.clip(0.0, 1.0) * 255).astype(np.uint8)
         h, w, _ = rgb8.shape
         qimg    = QImage(rgb8.tobytes(), w, h, 3 * w, QImage.Format.Format_RGB888)
-        pixmap  = QPixmap.fromImage(qimg).scaled(
-            self.render_label.width(),
-            self.render_label.height(),
+
+        # Use the actual label size; fall back to IMAGE_SIZE if not yet shown
+        lw = self.render_label.width()  or config.IMAGE_SIZE
+        lh = self.render_label.height() or config.IMAGE_SIZE
+
+        pixmap = QPixmap.fromImage(qimg).scaled(
+            lw, lh,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
         self.render_label.setPixmap(pixmap)
+        self.render_label.repaint()   # force Qt to flush the new frame immediately
 
-    # ──────────────────────────────────────────────────────────────────────────
     def _update_predictions(self, results: list[tuple[str, float]]):
-        """Populate the five prediction label + progress-bar pairs."""
         for i, (label, prob) in enumerate(results[:5]):
             self.pred_labels[i].setText(f"{label}  {prob * 100:.1f}%")
             self.pred_bars[i].setValue(int(prob * 100))
@@ -74,11 +53,8 @@ class RenderViewMixin:
             self.pred_labels[i].setText("—")
             self.pred_bars[i].setValue(0)
 
-    # ──────────────────────────────────────────────────────────────────────────
     def _sync_sliders(self):
-        """Push current scene tensor values back into the UI sliders.
-        Called after each optimisation step so the sliders reflect the
-        adversarially optimised pose / lighting."""
+        """Push optimised scene values back into the UI sliders."""
         with torch.no_grad():
             pos  = self.scene.pos.cpu().tolist()
             rot  = self.scene.rot.cpu().tolist()
