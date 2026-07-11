@@ -26,7 +26,7 @@ AVAILABLE_3D_MODELS = [
     ("Jeep",   "./models/Jeep/Jeep.obj"),
     ("Chair",  "./models/Chair/Chair.obj"),
     ("Plane",  "./models/Airbus/Airbus A310.obj"),
-    {"Person", "./models/Person/Person.obj"}
+    ("Person", "./models/Person/Person.obj")
 ]
 
 # ── Registry: available input images ──────────────────────────────────────────
