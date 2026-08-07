@@ -8,7 +8,7 @@ OBJ_PATH        = "./models/Jeep/Jeep.obj"
 BACKGROUND_PATH = "./background/background1.jpeg"
 
 # ── Renderer ───────────────────────────────────────────────────────────────────
-IMAGE_SIZE   = 512
+IMAGE_SIZE   = 1024
 CAMERA_DIST  = 8.0
 CAMERA_ELEV  = 10.0
 CAMERA_AZIM  = 0.0
@@ -43,3 +43,11 @@ AVAILABLE_VISION_MODELS = [
     ("ResNet-50",           "resnet50"),
     ("MobileNet-V3-Large",  "mobilenet_v3_large"),
 ]
+
+HUMAN_PARTS = {
+    "body":  "./models/human/body.obj",
+    "shirt": "./models/human/shirt.obj",
+    "pants": "./models/human/pants.obj",
+}
+
+BACKGROUND_3D_PATH = "./models/studio/studio.obj" 
