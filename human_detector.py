@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import random
 import numpy as np
@@ -156,7 +157,11 @@ def get_property(scene, prop_name: str):
     elif prop_name == "LIGHTING":
         return scene.ambient_intensity.detach().cpu().item()
     elif prop_name == "CLOTHING":
-        return scene.shirt_color.detach().cpu().numpy().copy()
+        # Read the current shirt color from the mesh textures
+        shirt = scene.parts.get("shirt")
+        if shirt is not None and hasattr(shirt.textures, "verts_features_list"):
+            return shirt.textures.verts_features_list()[0][0].detach().cpu().numpy().copy()
+        return np.array([0.2, 0.4, 0.8])
     return None
 
 
@@ -184,31 +189,74 @@ def format_params(scene, prop_name: str) -> str:
         val = scene.ambient_intensity.detach().cpu().item()
         return f"light=({val:+.3f})"
     if prop_name == "CLOTHING":
-        r, g, b = scene.shirt_color.detach().cpu().tolist()
+        shirt = scene.parts.get("shirt")
+        if shirt is not None and hasattr(shirt.textures, "verts_features_list"):
+            r, g, b = shirt.textures.verts_features_list()[0][0].tolist()
+        else:
+            r, g, b = 0.2, 0.4, 0.8
         return f"shirt=({r:+.3f}, {g:+.3f}, {b:+.3f})"
     return ""
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="3D Render Human Detection Adversarial Search"
+    )
+    parser.add_argument(
+        "--property",
+        type=str,
+        choices=["POSITION", "CLOTHING", "LIGHTING"],
+        default="POSITION",
+        help="Scene parameter to perturb during the search (default: POSITION)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        choices=["fasterrcnn_resnet50_fpn_v2", "retinanet_resnet50_fpn_v2"],
+        default="fasterrcnn_resnet50_fpn_v2",
+        help="Vision model to use for detection",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=100,
+        help="Number of search epochs",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=0.05,
+        help="Perturbation step size",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Torch device",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     print("=" * 70)
     print("  3D Render Human Detection Test")
     print("  Uses COCO Faster R-CNN (real \"person\" class)")
     print("=" * 70)
 
-
-    property_name = "POSITION"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    property_name = args.property
+    device = args.device
 
     scene = build_scene(device)
     classifier = HumanDetectionClassifier(
-        model_name="fasterrcnn_resnet50_fpn_v2",
+        model_name=args.model,
         device=device,
     )
 
-    model_label, model_path = config.AVAILABLE_3D_MODELS[0]
-    background_path = getattr(config, "BACKGROUND_PATH", getattr(config, "BACKGROUND_3D_PATH", "n/a"))
-
     print(f"Vision     : {classifier.model_name}")
-    print(f"Device     : {device}\n" + "-" * 70)
+    print(f"Device     : {device}")
+    print(f"Property   : {property_name}\n" + "-" * 70)
 
     with torch.no_grad():
         initial_render = scene.render()
@@ -229,8 +277,8 @@ def main():
         print(f"  All person scores : {[f'{s:.3f}' for s in result['all_scores']]}\n")
 
     # Search Execution
-    N_EPOCHS = 100
-    LR = 0.05
+    N_EPOCHS = args.epochs
+    LR = args.lr
 
     print(f"Starting {N_EPOCHS}-epoch random search")
     print(f"Property   : {property_name}")

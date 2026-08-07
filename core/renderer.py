@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 import torch
 import torch.nn.functional as F
+import math
 
 import pytorch3d.transforms as T
 from pytorch3d.io import load_objs_as_meshes
@@ -428,18 +429,54 @@ class MeshScene3D:
             self._renderer_dirty = False
         return self._renderer
 
+    def _get_renderer(self, faces_per_pixel: int = 1):
+        if self._renderer is None or self._renderer_dirty:
+            # Count total faces so the coarse rasterizer never overflows
+            total_faces = sum(
+                m.faces_list()[0].shape[0] for m in self.parts.values()
+            )
+            if self.background is not None:
+                total_faces += self.background.faces_list()[0].shape[0]
+
+            raster_settings = RasterizationSettings(
+                image_size=self.image_size,
+                blur_radius=0.0,
+                faces_per_pixel=faces_per_pixel,
+                cull_backfaces=True,
+                max_faces_per_bin=max(total_faces, 50_000),
+            )
+            self._renderer = MeshRenderer(
+                rasterizer=MeshRasterizer(
+                    cameras=self.camera, raster_settings=raster_settings
+                ),
+                shader=HardPhongShader(
+                    device=self.device,
+                    cameras=self.camera,
+                    lights=self.lights,
+                    blend_params=BlendParams(background_color=(0.1, 0.1, 0.1)),
+                ),
+            )
+            self._renderer_dirty = False
+        return self._renderer
+
     def _get_renderer_differentiable(self, faces_per_pixel: int = 8):
-        """Soft-rasterization renderer for gradient-based (adversarial)
-        optimization. Not cached — rebuilt each call to always match the
-        current camera/lights without needing a separate dirty flag."""
+        total_faces = sum(
+            m.faces_list()[0].shape[0] for m in self.parts.values()
+        )
+        if self.background is not None:
+            total_faces += self.background.faces_list()[0].shape[0]
+
         raster_settings = RasterizationSettings(
             image_size=self.image_size,
             blur_radius=1e-5,
             faces_per_pixel=faces_per_pixel,
             cull_backfaces=True,
+            max_faces_per_bin=max(total_faces, 50_000),
         )
         return MeshRenderer(
-            rasterizer=MeshRasterizer(cameras=self.camera, raster_settings=raster_settings),
+            rasterizer=MeshRasterizer(
+                cameras=self.camera, raster_settings=raster_settings
+            ),
             shader=SoftPhongShader(
                 device=self.device,
                 cameras=self.camera,
