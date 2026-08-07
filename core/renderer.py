@@ -59,6 +59,7 @@ class MeshScene:
             image_size=IMAGE_SIZE,
             blur_radius=0.0,
             faces_per_pixel=1,
+            max_faces_per_bin=50000,
         )
         lights = PointLights(
             device=self.device,
