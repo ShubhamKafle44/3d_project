@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-import config
+import config as config
 from core.renderer import MeshScene3D
 
 

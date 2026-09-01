@@ -6,7 +6,7 @@ import torch
 from PyQt6.QtGui  import QImage, QPixmap
 from PyQt6.QtCore import Qt
 
-import config
+import config as config
 
 
 class RenderViewMixin:

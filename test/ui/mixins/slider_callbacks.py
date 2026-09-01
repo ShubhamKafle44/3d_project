@@ -1,4 +1,6 @@
 import torch
+
+
 class SliderCallbacksMixin:
     """Translates slider value-change events into 3-D scene parameter updates."""
 

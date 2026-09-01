@@ -15,7 +15,7 @@ from torchvision.models import (
     ViT_B_16_Weights,
 )
 
-import config
+import config as config
 
 logger = logging.getLogger(__name__)
 

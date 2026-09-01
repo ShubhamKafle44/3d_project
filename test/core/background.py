@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 from PIL import Image
-import config
+import config as config
 
 logger = logging.getLogger(__name__)
 

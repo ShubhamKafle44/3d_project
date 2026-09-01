@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from PyQt6.QtCore import QObject, pyqtSignal
 
-import config
+import config as config
 from core.classifier import AdversarialOptimiser
 
 

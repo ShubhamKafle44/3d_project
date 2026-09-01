@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-import config
+import config as config
 from core.classifier import ImageClassifier
 from core.renderer import MeshScene
 

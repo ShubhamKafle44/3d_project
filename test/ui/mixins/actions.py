@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from PIL import Image
 from PyQt6.QtWidgets import QMessageBox
-import config
+import config as config
 
 class ActionsMixin:
  

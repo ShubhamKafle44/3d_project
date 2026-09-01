@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
  
-import config
+import config as config
 from ui.widgets.slider_helper import make_slider
  
  

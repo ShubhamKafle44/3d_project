@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow
 
-import config
+import config as config
 from core.renderer   import MeshScene
 from core.classifier import ImageClassifier
 
