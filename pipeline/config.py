@@ -11,7 +11,7 @@ HUMAN_PARTS = {
 
 # BACKGROUND_PATH = "assets/studio/Street environment_V01.obj"
 
-# BACKGROUND_PATH = "assets/environment/scene.obj"
+BACKGROUND_PATH = "assets/environment/road_pack.obj"
 
 BACKGROUND_PATH = None
 

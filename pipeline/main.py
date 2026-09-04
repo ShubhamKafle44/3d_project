@@ -14,7 +14,7 @@ def main():
     # SETTINGS
     # =========================
 
-    renderer = "mitsuba"
+    renderer = "pytorch3d"
     # Other value: "pytorch3d", "mitsuba"
 
     property = "POSITION"
