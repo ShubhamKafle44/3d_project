@@ -1,0 +1,130 @@
+# Blender 5.2.1 LTS MTL File: 'scene.blend'
+# www.blender.org
+
+newmtl mat0
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd ConcreteBarrierAShader_baseColor.jpg
+map_Pm ConcreteBarrierAShader_metallicRoughness.png
+map_Pr ConcreteBarrierAShader_metallicRoughness.png
+map_Bump ConcreteBarrierAShader_normal.jpg
+
+newmtl mat1
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd ConcreteBarrierBShader_baseColor.jpg
+map_Pm ConcreteBarrierBShader_metallicRoughness.png
+map_Pr ConcreteBarrierBShader_metallicRoughness.png
+map_Bump ConcreteBarrierBShader_normal.jpg
+
+newmtl mat2
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd RoadWorksSignNewMat_baseColor.jpg
+map_Pm RoadWorksSignNewMat_metallicRoughness.png
+map_Pr RoadWorksSignNewMat_metallicRoughness.png
+map_Bump RoadWorksSignNewMat_normal.jpg
+
+newmtl mat3
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd RoadClosedNewMat_baseColor.jpg
+map_Pm RoadClosedNewMat_metallicRoughness.png
+map_Pr RoadClosedNewMat_metallicRoughness.png
+map_Bump RoadClosedNewMat_normal.jpg
+
+newmtl mat4
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd RoadWorksSignOldMat_baseColor.jpg
+map_Pm RoadWorksSignOldMat_metallicRoughness.png
+map_Pr RoadWorksSignOldMat_metallicRoughness.png
+map_Bump RoadWorksSignOldMat_normal.jpg
+
+newmtl mat5
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd RoadClosedOldMat_baseColor.jpg
+map_Pm RoadClosedOldMat_metallicRoughness.png
+map_Pr RoadClosedOldMat_metallicRoughness.png
+map_Bump RoadClosedOldMat_normal.jpg
+
+newmtl mat6
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd RoadShader_baseColor.jpg
+map_Pm RoadShader_metallicRoughness.png
+map_Pr RoadShader_metallicRoughness.png
+map_Bump RoadShader_normal.jpg
+
+newmtl mat7
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd M_TrafficCones_baseColor.jpg
+map_Pm M_TrafficCones_metallicRoughness.png
+map_Pr M_TrafficCones_metallicRoughness.png
+map_Bump M_TrafficCones_normal.jpg

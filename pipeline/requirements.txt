@@ -1,0 +1,15 @@
+# Core
+torch>=2.1
+torchvision>=0.16
+numpy
+Pillow
+
+# Mitsuba backend (installable via pip, CPU-ready out of the box)
+mitsuba>=3.5
+
+# PyTorch3D backend - NOT pip-installable as a universal wheel.
+# Install per your torch/CUDA version, e.g.:
+#   conda install pytorch3d -c pytorch3d
+# or build from source:
+#   pip install "git+https://github.com/facebookresearch/pytorch3d.git"
+# See: https://github.com/facebookresearch/pytorch3d/blob/main/INSTALL.md
