@@ -3,11 +3,14 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
+import config
 from .base import DifferentiableScene
+from .collision import boxes_overlap_any, obj_bounds, obj_face_bounds
 
 try:
-    from pytorch3d.io import load_objs_as_meshes
+    from pytorch3d.io import load_obj, load_objs_as_meshes
     from pytorch3d.structures import join_meshes_as_scene, Meshes
     from pytorch3d.renderer import (
         look_at_view_transform,
@@ -17,6 +20,7 @@ try:
         MeshRenderer,
         MeshRasterizer,
         SoftPhongShader,
+        TexturesUV,
         TexturesVertex,
     )
     _PYTORCH3D_AVAILABLE = True
@@ -37,6 +41,11 @@ class PyTorch3DScene(DifferentiableScene):
 
         self.parts: Dict[str, Meshes] = {}
         self.background: Optional[Meshes] = None
+        self._background_is_textured = False
+        self._subject_lower: Optional[np.ndarray] = None
+        self._subject_upper: Optional[np.ndarray] = None
+        self._background_face_lower: Optional[np.ndarray] = None
+        self._background_face_upper: Optional[np.ndarray] = None
 
         # Adversary-controlled parameters (Tensors for Autograd)
         self.pos = torch.zeros(3, device=self.device)
@@ -54,26 +63,170 @@ class PyTorch3DScene(DifferentiableScene):
             image_size=self.image_size,
             blur_radius=0.0,
             faces_per_pixel=1,
+            # The road scene has many small faces in the same screen bins.
+            # These settings prevent coarse-rasterization overflow and the
+            # resulting incomplete geometry warnings.
+            # The CUDA kernel needs fewer than 22 bins on either screen axis.
+            # Scale this with resolution: 32 at 512px, 64 at 1024px, and 128
+            # at 2048px. CPU rendering uses the supported naive path.
+            bin_size=(
+                2 ** max(int(np.ceil(np.log2(self.image_size))) - 4, 4)
+                if self.device.type == "cuda"
+                else 0
+            ),
+            max_faces_per_bin=200_000,
         )
 
     # ---- asset loading ---------------------------------------------
     def load_mesh(self, path: str, name: str = "mesh") -> None:
-        mesh = load_objs_as_meshes([path], device=self.device)
+        # Human parts receive the configured solid colours below, so avoid
+        # loading absent source texture files solely to discard them later.
+        mesh = load_objs_as_meshes([path], device=self.device, load_textures=False)
         if not mesh.textures:
             verts = mesh.verts_packed()
             white = torch.ones_like(verts)[None]
             mesh.textures = TexturesVertex(verts_features=white)
         self.parts[name] = mesh
+        lower, upper = obj_bounds(path)
+        self._subject_lower = lower if self._subject_lower is None else np.minimum(self._subject_lower, lower)
+        self._subject_upper = upper if self._subject_upper is None else np.maximum(self._subject_upper, upper)
 
     def load_background(self, path: str) -> None:
-        self.background = load_objs_as_meshes([path], device=self.device)
+        """Load background materials into a padded UV atlas.
+
+        ``TexturesUV`` uses one map for a scene.  Each source map is therefore
+        placed in its own atlas tile with replicated-pixel gutters.  The
+        gutters keep bilinear sampling inside the correct material, while UVs
+        are repeated within their own tile instead of leaking into a neighbor.
+        """
+        self._background_face_lower, self._background_face_upper = obj_face_bounds(path)
+        verts, faces, aux = load_obj(
+            path,
+            load_textures=True,
+            device=self.device,
+        )
+        texture_images = aux.texture_images or {}
+        if not texture_images or faces.textures_idx is None:
+            self.background = Meshes(verts=[verts], faces=[faces.verts_idx])
+            self._background_is_textured = False
+            return
+
+        # Preserve source-map aspect ratios and reserve a neutral first tile
+        # for faces with no ``usemtl`` binding (the enclosure in road_pack).
+        # The source road map is 8192x4096.  Keeping a 2048px-high atlas for
+        # a 768px optimization render needlessly consumes hundreds of MB on
+        # CUDA; 512px retains more texture detail than the attack render can
+        # resolve.  Use a larger atlas only for full-resolution final renders.
+        atlas_height = 512 if self.image_size <= 1024 else 1024
+        gutter = 4
+        tiles = [torch.full(
+            (3, atlas_height + 2 * gutter, atlas_height + 2 * gutter),
+            0.18,
+            dtype=torch.float32,
+        )]
+        content_widths = [atlas_height]
+        tile_widths = [atlas_height + 2 * gutter]
+        for texture in texture_images.values():
+            # Resize the large source maps on CPU, then move only the compact
+            # atlas to CUDA.  Moving the original 8K road map first causes an
+            # unnecessary ~400 MB transient allocation.
+            image = texture[..., :3].to(
+                device="cpu", dtype=torch.float32
+            ).permute(2, 0, 1).unsqueeze(0)
+            height, width = texture.shape[:2]
+            tile_width = max(1, round(width / height * atlas_height))
+            image = F.interpolate(
+                image,
+                size=(atlas_height, tile_width),
+                mode="bilinear",
+                align_corners=False,
+            )
+            # Replicate the edge texels around a tile.  Without this gutter,
+            # bilinear filtering blends at an atlas boundary with the next
+            # material and produces visible road/prop seams.
+            tiles.append(F.pad(image[0], (gutter, gutter, gutter, gutter), mode="replicate"))
+            content_widths.append(tile_width)
+            tile_widths.append(tile_width + 2 * gutter)
+
+        atlas_width = sum(tile_widths)
+        texture_atlas = torch.cat(tiles, dim=2).permute(1, 2, 0).to(self.device)
+
+        source_material_ids = faces.materials_idx.to(self.device)
+        if source_material_ids.max().item() >= len(texture_images):
+            raise ValueError("Background material indices do not match loaded textures")
+        # -1 means no material: map it to the neutral tile at index 0.
+        material_ids = torch.where(
+            source_material_ids >= 0,
+            source_material_ids + 1,
+            torch.zeros_like(source_material_ids),
+        )
+        widths = torch.tensor(content_widths, dtype=torch.float32, device=self.device)
+        padded_widths = torch.tensor(tile_widths, dtype=torch.float32, device=self.device)
+        offsets = torch.cat((
+            torch.zeros(1, device=self.device),
+            padded_widths.cumsum(dim=0)[:-1],
+        ))
+
+        # UV indices may be shared by faces that use different materials.
+        # Duplicate them per face before applying the material-tile transform.
+        face_uvs = aux.verts_uvs.to(self.device)[faces.textures_idx.to(self.device)].clone()
+
+        # Do not map an exact 1.0 UV endpoint back to 0.0.  The road is a
+        # broad quad with UVs (0, 0) through (1, 1); plain modulo collapses
+        # all four corners to one texel and makes the road appear untextured.
+        def wrap_uv(uv: torch.Tensor) -> torch.Tensor:
+            wrapped = torch.remainder(uv, 1.0)
+            is_positive_integer = (uv > 0) & torch.isclose(
+                wrapped, torch.zeros_like(wrapped), atol=1e-6, rtol=0.0
+            )
+            return torch.where(is_positive_integer, torch.ones_like(wrapped), wrapped)
+
+        face_uvs[..., 0] = wrap_uv(face_uvs[..., 0])
+        face_uvs[..., 1] = wrap_uv(face_uvs[..., 1])
+        face_uvs[..., 0] = (
+            face_uvs[..., 0] * widths[material_ids, None]
+            + offsets[material_ids, None]
+            + gutter
+        ) / atlas_width
+        face_uvs[..., 1] = (
+            face_uvs[..., 1] * atlas_height + gutter
+        ) / (atlas_height + 2 * gutter)
+        atlas_uvs = face_uvs.reshape(-1, 2)
+        atlas_faces_uvs = torch.arange(
+            atlas_uvs.shape[0], device=self.device, dtype=torch.int64
+        ).reshape_as(faces.textures_idx)
+
+        self.background = Meshes(
+            verts=[verts],
+            faces=[faces.verts_idx],
+            textures=TexturesUV(
+                maps=[texture_atlas],
+                verts_uvs=[atlas_uvs],
+                faces_uvs=[atlas_faces_uvs],
+            ),
+        )
+        self._background_is_textured = True
 
     # ---- position / rotation ----------------------------------------
     def set_position(self, x: float, y: float, z: float) -> None:
-        self.pos = torch.tensor([x, y, z], device=self.device, dtype=torch.float32)
+        candidate = np.array([x, y, z], dtype=np.float32)
+        if self.is_position_valid(candidate):
+            self.pos = torch.tensor(candidate, device=self.device, dtype=torch.float32)
 
     def get_position(self) -> np.ndarray:
         return self.pos.detach().cpu().numpy().copy()
+
+    def is_position_valid(self, position: np.ndarray) -> bool:
+        if self._background_face_lower is None or self._subject_lower is None:
+            return True
+        offset = np.asarray(position, dtype=np.float32)
+        return not boxes_overlap_any(
+            self._subject_lower + offset,
+            self._subject_upper + offset,
+            self._background_face_lower,
+            self._background_face_upper,
+            config.POSITION_COLLISION_CLEARANCE,
+        )
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
         self.rot_deg = torch.tensor([yaw, pitch, roll], device=self.device, dtype=torch.float32)
@@ -103,6 +256,16 @@ class PyTorch3DScene(DifferentiableScene):
         if mesh is not None and hasattr(mesh.textures, "verts_features_list"):
             return mesh.textures.verts_features_list()[0][0].detach().cpu().numpy().copy()
         return np.array([1.0, 1.0, 1.0])
+
+    def set_vertex_colors(self, part_name: str, colors: torch.Tensor) -> None:
+        """Assign differentiable per-vertex RGB values to a mesh part."""
+        mesh = self.parts.get(part_name)
+        if mesh is None:
+            raise KeyError(f"Unknown mesh part: {part_name}")
+        expected = mesh.verts_packed().shape[0]
+        if colors.shape != (expected, 3):
+            raise ValueError(f"expected colors shaped ({expected}, 3), got {tuple(colors.shape)}")
+        mesh.textures = TexturesVertex(verts_features=colors.unsqueeze(0))
 
     # ---- camera ----------------------------------------------------------
     def set_camera_orbit(
@@ -174,7 +337,7 @@ class PyTorch3DScene(DifferentiableScene):
             m = mesh.clone()
             m = m.update_padded(verts.unsqueeze(0))
             meshes.append(m)
-        if self.background is not None:
+        if self.background is not None and not self._background_is_textured:
             meshes.append(self.background)
         return join_meshes_as_scene(meshes) if len(meshes) > 1 else meshes[0]
 
@@ -217,66 +380,14 @@ class PyTorch3DScene(DifferentiableScene):
         else:
             scene_mesh = join_meshes_as_scene(meshes)
 
-        # ============================================================
-        # 2. Find HUMAN bounding box
-        # ============================================================
-        verts = scene_mesh.verts_packed()
-
-        bbox_min = verts.min(dim=0).values
-        bbox_max = verts.max(dim=0).values
-
-        center = (bbox_min + bbox_max) / 2.0
-        size = bbox_max - bbox_min
-        max_size = torch.max(size)
-
-        print("\n========================================")
-        print("PYTORCH3D HUMAN DEBUG")
-        print("========================================")
-        print("bbox min :", bbox_min.detach().cpu().numpy())
-        print("bbox max :", bbox_max.detach().cpu().numpy())
-        print("center   :", center.detach().cpu().numpy())
-        print("size     :", size.detach().cpu().numpy())
-        print("max size :", max_size.item())
-        print("========================================\n")
-
-        # ============================================================
-        # 3. Automatically aim camera at human
-        # ============================================================
-        camera_target = center.detach()
-
-        # Convert tensor to tuple
-        camera_target_tuple = tuple(
-            camera_target.cpu().numpy().tolist()
-        )
-
-        # ============================================================
-        # 4. Automatically choose camera distance
-        # ============================================================
-        fov_rad = np.deg2rad(self._cam_fov)
-
-        # Fit object vertically in the camera
-        distance = (
-            max_size.item()
-            / (2.0 * np.tan(fov_rad / 2.0))
-        )
-
-        # Add some margin
-        distance *= 1.5
-
-        # Prevent absurdly small distances
-        distance = max(distance, 0.1)
-
-        print("Camera target :", camera_target_tuple)
-        print("Camera dist   :", distance)
-
-        # ============================================================
-        # 5. Camera
-        # ============================================================
+        # Use the configured scene camera.  The old code recalculated both
+        # target and distance from the human every frame, which guaranteed a
+        # close-up and excluded the environment from composition.
         R, T = look_at_view_transform(
-            dist=distance,
+            dist=self._cam_distance,
             elev=self._cam_elev,
             azim=self._cam_azim,
-            at=(camera_target_tuple,),
+            at=(self._cam_target,),
             device=self.device,
         )
 
@@ -337,7 +448,19 @@ class PyTorch3DScene(DifferentiableScene):
         # ============================================================
         # 9. Render
         # ============================================================
-        images = renderer(scene_mesh)
+        foreground = renderer(scene_mesh)
+        if self.background is not None and self._background_is_textured:
+            background = renderer(self.background)
+            # SoftPhong's alpha can be fractional at a face even with no
+            # intended transparency.  Use a hard rasterized silhouette for
+            # compositing so the road texture cannot show through the human.
+            alpha = (foreground[..., 3:4] > 0).to(foreground.dtype)
+            images = torch.cat(
+                (foreground[..., :3] * alpha + background[..., :3] * (1 - alpha), alpha),
+                dim=-1,
+            )
+        else:
+            images = foreground
 
         img = images[0, ..., :3].clamp(0.0, 1.0)
 

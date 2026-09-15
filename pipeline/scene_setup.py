@@ -5,8 +5,12 @@ import config
 from renderer import DifferentiableScene, build_scene
 
 
-def build_human_scene(backend: str, device: str) -> DifferentiableScene:
-    scene = build_scene(backend, device=device, image_size=config.IMAGE_SIZE)
+def build_human_scene(
+    backend: str, device: str, image_size: int | None = None
+) -> DifferentiableScene:
+    scene = build_scene(
+        backend, device=device, image_size=image_size or config.IMAGE_SIZE
+    )
 
     for part_name, part_path in config.HUMAN_PARTS.items():
         scene.load_mesh(part_path, name=part_name)

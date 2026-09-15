@@ -3,9 +3,9 @@ import os
 import torch
 
 import config
-from scene_setup import build_human_scene, auto_zoom_to_subject
+from scene_setup import build_human_scene
 from detector import HumanDetectionClassifier
-from search import run_adversarial_search, save_image
+from search import run_3d_appearance_attack, run_adversarial_search, save_image
 
 
 def main():
@@ -42,20 +42,25 @@ def main():
     print("Adversarial Search")
     print(f"Renderer : {renderer}")
     print(f"Detector : {model}")
-    print(f"Property : {property}")
+    attack_label = "3D shirt appearance" if (
+        renderer == "pytorch3d" and config.SEARCH["mode"] == "gradient_appearance"
+    ) else property
+    print(f"Property : {attack_label}")
     print(f"Device   : {device}")
     print("=" * 60)
 
-    scene = build_human_scene(renderer, device=device)
+    gradient_mode = renderer == "pytorch3d" and config.SEARCH["mode"] == "gradient_appearance"
+    scene = build_human_scene(
+        renderer,
+        device=device,
+        image_size=config.SEARCH["gradient_image_size"] if gradient_mode else None,
+    )
 
     classifier = HumanDetectionClassifier(
         model_name=model,
         device=device
     )
 
-    # Automatically position the camera around the human
-    coverage = auto_zoom_to_subject(scene)
-    print(f"Subject coverage: {coverage * 100:.1f}%")
 
     # =========================
     # INITIAL RENDER
@@ -76,14 +81,25 @@ def main():
     # ADVERSARIAL SEARCH
     # =========================
 
-    result = run_adversarial_search(
-        scene,
-        classifier,
-        property,
-        epochs=epochs,
-        step_size=step_size,
-        success_threshold=success_threshold,
-    )
+    if gradient_mode:
+        result = run_3d_appearance_attack(
+            scene,
+            classifier,
+            epochs=epochs,
+            learning_rate=config.SEARCH["gradient_learning_rate"],
+            validate_every=config.SEARCH["gradient_validate_every"],
+            detector_input_size=config.SEARCH["gradient_detector_size"],
+            success_threshold=success_threshold,
+        )
+    else:
+        result = run_adversarial_search(
+            scene,
+            classifier,
+            property,
+            epochs=epochs,
+            step_size=step_size,
+            success_threshold=success_threshold,
+        )
 
     # =========================
     # SAVE RESULT

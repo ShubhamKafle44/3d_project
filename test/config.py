@@ -6,6 +6,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # ── Paths ──────────────────────────────────────────────────────────────────────
 OBJ_PATH        = "./models/Jeep/Jeep.obj"
 BACKGROUND_PATH = "./background/background1.jpeg"
+BACKGROUND_PATH = "./background/background1.jpeg"
 
 # ── Renderer ───────────────────────────────────────────────────────────────────
 IMAGE_SIZE   = 1024
@@ -50,4 +51,4 @@ HUMAN_PARTS = {
     "pants": "./models/human/pants.obj",
 }
 
-BACKGROUND_3D_PATH = "./models/studio/studio.obj" 
+BACKGROUND_3D_PATH = "../pipeline/assets/environment/road_pack.obj" 

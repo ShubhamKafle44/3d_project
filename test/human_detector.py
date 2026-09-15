@@ -116,14 +116,27 @@ def auto_zoom_to_subject(scene: MeshScene3D) -> float:
 
 
 def build_scene(device):
-    scene = MeshScene3D(device=device, image_size=config.IMAGE_SIZE)
+    scene = MeshScene3D(
+        device=device,
+        image_size=config.IMAGE_SIZE
+    )
+
+    if hasattr(scene, "set_point_light"):
+        scene.set_point_light(
+            position=(-2.0, 5.0, 5.0),
+            intensity=1.0,
+        )
+
     for part_name, part_path in config.HUMAN_PARTS.items():
         scene.load_mesh(part_path, name=part_name)
+
     if getattr(config, "BACKGROUND_3D_PATH", None):
         scene.load_background(config.BACKGROUND_3D_PATH)
+
     scene.set_part_color("shirt", (0.2, 0.4, 0.8))
     scene.set_part_color("pants", (0.15, 0.15, 0.15))
     scene.set_part_color("body", (0.9, 0.75, 0.65))
+
     return scene
 
 

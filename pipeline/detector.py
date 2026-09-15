@@ -4,6 +4,7 @@ from typing import Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 COCO_PERSON_IDX = 1
 
@@ -69,3 +70,34 @@ class HumanDetectionClassifier:
 
     def human_probability(self, img) -> float:
         return self.classify(img)["human_prob"]
+
+    def rpn_objectness_loss(
+        self, image: torch.Tensor, topk: int = 256, input_size: int = 384
+    ) -> torch.Tensor:
+        """Differentiable surrogate that suppresses the detector's proposals.
+
+        Detection scores returned by Faster R-CNN are post-NMS and cannot be
+        differentiated reliably.  The RPN logits occur before proposal
+        filtering, so minimizing their largest values supplies a useful image
+        gradient for a rendered 3D appearance attack.
+        """
+        if image.ndim != 3 or image.shape[0] != 3:
+            raise ValueError("expected a differentiable RGB image shaped [3, H, W]")
+        image = image.to(self.device, dtype=torch.float32).clamp(0.0, 1.0)
+        # The normal detector transform upsamples inputs to 800px, which is
+        # wasteful during backpropagation on a small GPU.  Use a compact
+        # surrogate pass; the unmodified detector is still used for validation.
+        transform = self.model.transform
+        original_min_size, original_max_size = transform.min_size, transform.max_size
+        transform.min_size, transform.max_size = (input_size,), input_size
+        try:
+            images, _ = transform([image], None)
+        finally:
+            transform.min_size, transform.max_size = original_min_size, original_max_size
+        features = self.model.backbone(images.tensors)
+        if isinstance(features, torch.Tensor):
+            features = {"0": features}
+        objectness, _ = self.model.rpn.head(list(features.values()))
+        logits = torch.cat([level.reshape(-1) for level in objectness])
+        strongest = torch.topk(logits, k=min(topk, logits.numel())).values
+        return F.softplus(strongest).mean()
