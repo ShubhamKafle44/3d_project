@@ -25,7 +25,7 @@ DEVICE = "cuda" if os.environ.get("FORCE_CPU") != "1" else "cpu"
 CAMERA = {
     "distance": 8.5,
     "elevation": 10.0,
-    "azimuth": 0.0,
+    "azimuth": -8.0,
     "target": (0.0, 0.9, 0.0),
     "fov": 45.0,
 }

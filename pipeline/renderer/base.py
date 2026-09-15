@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
@@ -22,14 +21,6 @@ class DifferentiableScene(ABC):
 
     @abstractmethod
     def get_position(self) -> np.ndarray: ...
-
-    def is_position_valid(self, position: np.ndarray) -> bool:
-        """Whether a candidate position is safe to render.
-
-        Backends with static geometry override this to prevent the adversarial
-        search from placing the subject inside an environment object.
-        """
-        return True
 
     @abstractmethod
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None: ...
