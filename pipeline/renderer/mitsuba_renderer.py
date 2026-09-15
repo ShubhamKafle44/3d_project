@@ -4,12 +4,17 @@ import os
 
 import numpy as np
 
+import config
 from .base import DifferentiableScene
 
 try:
     import mitsuba as mi
 
-    _MI_VARIANT = os.environ.get("MITSUBA_VARIANT", "cuda_ad_rgb")
+    # CPU is the safe default for the standard random-search path.  Some
+    # installations provide ``cuda_ad_rgb`` but not ``cuda_rgb``, and OptiX
+    # can exceed a 6 GB GPU budget on this scene.  Opt into a CUDA variant
+    # explicitly via MITSUBA_VARIANT when sufficient VRAM is available.
+    _MI_VARIANT = os.environ.get("MITSUBA_VARIANT", "scalar_rgb")
     mi.set_variant(_MI_VARIANT)
     _MITSUBA_AVAILABLE = True
 except ImportError:
@@ -21,6 +26,7 @@ class MitsubaScene(DifferentiableScene):
         if not _MITSUBA_AVAILABLE:
             raise ImportError("mitsuba is not installed. Run: pip install mitsuba")
         self.image_size = image_size
+        self._spp = config.MITSUBA_SPP
 
         self._part_paths: Dict[str, str] = {}
         self._part_colors: Dict[str, Tuple[float, float, float]] = {}
@@ -137,7 +143,7 @@ class MitsubaScene(DifferentiableScene):
                     "height": self.image_size,
                     "pixel_format": "rgb",
                 },
-                "sampler": {"type": "independent", "sample_count": 32},
+                "sampler": {"type": "independent", "sample_count": self._spp},
             },
             "light": {
                 "type": "point",
@@ -187,7 +193,7 @@ class MitsubaScene(DifferentiableScene):
         try:
             scene_dict = self._build_scene_dict()
             scene = mi.load_dict(scene_dict)
-            image = mi.render(scene, spp=32)
+            image = mi.render(scene, spp=self._spp)
             img_np = np.array(mi.util.convert_to_bitmap(image))
             if img_np.shape[-1] == 4:
                 img_np = img_np[..., :3]

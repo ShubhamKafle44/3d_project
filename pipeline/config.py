@@ -20,6 +20,10 @@ ENV_MAP_PATH = None  # e.g. "assets/scene/env.hdr"
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
+# Mitsuba's OptiX path is substantially more memory hungry than PyTorch3D.
+# Keep its normal (non-gradient) renders within a 6 GB GPU budget.
+MITSUBA_IMAGE_SIZE = 1024
+MITSUBA_SPP = 8
 DEVICE = "cuda" if os.environ.get("FORCE_CPU") != "1" else "cpu"
 
 CAMERA = {

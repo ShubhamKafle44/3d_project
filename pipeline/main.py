@@ -50,10 +50,15 @@ def main():
     print("=" * 60)
 
     gradient_mode = renderer == "pytorch3d" and config.SEARCH["mode"] == "gradient_appearance"
+    scene_image_size = (
+        config.SEARCH["gradient_image_size"] if gradient_mode
+        else config.MITSUBA_IMAGE_SIZE if renderer == "mitsuba"
+        else None
+    )
     scene = build_human_scene(
         renderer,
         device=device,
-        image_size=config.SEARCH["gradient_image_size"] if gradient_mode else None,
+        image_size=scene_image_size,
     )
 
     classifier = HumanDetectionClassifier(
