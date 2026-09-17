@@ -1,9 +1,11 @@
 from __future__ import annotations
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 
 import config
 from .base import DifferentiableScene
@@ -23,9 +25,176 @@ try:
         TexturesUV,
         TexturesVertex,
     )
+    from pytorch3d.renderer.blending import softmax_rgb_blend
+    from pytorch3d.renderer.mesh.shading import phong_shading
     _PYTORCH3D_AVAILABLE = True
 except ImportError:
     _PYTORCH3D_AVAILABLE = False
+
+
+class InverseSquarePointLights(PointLights if _PYTORCH3D_AVAILABLE else object):
+    """Point lights with the distance falloff used by Mitsuba emitters.
+
+    PyTorch3D's built-in ``PointLights`` normalizes the light direction but
+    intentionally does not attenuate its brightness by distance.  Mitsuba's
+    point emitter does, so matching its scene requires that attenuation here.
+    """
+
+    def _attenuation(self, points: torch.Tensor) -> torch.Tensor:
+        location = self.reshape_location(points)
+        distance_squared = (location - points).square().sum(dim=-1, keepdim=True)
+        return distance_squared.clamp_min(1e-4).reciprocal()
+
+    def diffuse(self, normals: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
+        return super().diffuse(normals, points) * self._attenuation(points)
+
+    def specular(
+        self,
+        normals: torch.Tensor,
+        points: torch.Tensor,
+        camera_position: torch.Tensor,
+        shininess: torch.Tensor,
+    ) -> torch.Tensor:
+        return (
+            super().specular(normals, points, camera_position, shininess)
+            * self._attenuation(points)
+        )
+
+
+class AlphaCutoutPhongShader(SoftPhongShader if _PYTORCH3D_AVAILABLE else object):
+    """Soft Phong shading with binary texture-alpha cutouts for foliage."""
+
+    def forward(self, fragments, meshes, **kwargs) -> torch.Tensor:
+        cameras = super()._get_cameras(**kwargs)
+        texels = meshes.sample_textures(fragments)
+        lights = kwargs.get("lights", self.lights)
+        materials = kwargs.get("materials", self.materials)
+        blend_params = kwargs.get("blend_params", self.blend_params)
+        colors = phong_shading(
+            meshes=meshes,
+            fragments=fragments,
+            texels=texels[..., :3],
+            lights=lights,
+            cameras=cameras,
+            materials=materials,
+        )
+        if texels.shape[-1] > 3:
+            # ``Fragments`` is a frozen dataclass in current PyTorch3D, not
+            # a NamedTuple.  Reconstruct it instead of using ``_replace``.
+            fragments = type(fragments)(
+                pix_to_face=fragments.pix_to_face.masked_fill(
+                    texels[..., 3] < 0.5, -1
+                ),
+                zbuf=fragments.zbuf,
+                bary_coords=fragments.bary_coords,
+                dists=fragments.dists,
+            )
+        znear = kwargs.get("znear", getattr(cameras, "znear", 1.0))
+        zfar = kwargs.get("zfar", getattr(cameras, "zfar", 100.0))
+        return softmax_rgb_blend(colors, fragments, blend_params, znear=znear, zfar=zfar)
+
+
+def _resolve_mtl_texture(mtl_path: Path, value: str) -> Optional[Path]:
+    """Resolve an MTL map value containing options and/or a spaced filename."""
+    words = value.split()
+    for index in range(len(words)):
+        candidate = mtl_path.parent / " ".join(words[index:])
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _pytorch3d_safe_obj(path: str) -> str:
+    """Cache an OBJ/MTL pair with unsupported MTL texture options removed."""
+    source = Path(path)
+    obj_lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    mtl_name = next(
+        (line.split(maxsplit=1)[1] for line in obj_lines if line.startswith("mtllib ")),
+        None,
+    )
+    if mtl_name is None:
+        return str(source)
+    mtl_source = source.parent / mtl_name
+    if not mtl_source.is_file():
+        return str(source)
+    cached_obj = source.with_name(f"{source.stem}.pytorch3d_safe{source.suffix}")
+    cached_mtl = source.with_name(f"{source.stem}.pytorch3d_safe.mtl")
+    if (
+        cached_obj.is_file()
+        and cached_mtl.is_file()
+        and cached_obj.stat().st_mtime >= source.stat().st_mtime
+        and cached_mtl.stat().st_mtime >= mtl_source.stat().st_mtime
+    ):
+        return str(cached_obj)
+
+    clean_mtl = []
+    for line in mtl_source.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("map_Kd "):
+            texture_path = _resolve_mtl_texture(mtl_source, line[7:])
+            if texture_path is not None:
+                # PyTorch3D treats MTL options such as ``-s`` as part of the
+                # filename. Its loader already supports spaces in filenames.
+                line = f"map_Kd {texture_path.name}"
+        clean_mtl.append(line)
+    cached_mtl.write_text("\n".join(clean_mtl) + "\n", encoding="utf-8")
+    cached_obj.write_text(
+        "\n".join(
+            f"mtllib {cached_mtl.name}" if line.startswith("mtllib ") else line
+            for line in obj_lines
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(cached_obj)
+
+
+def _material_alpha_images(obj_path: Path) -> Dict[str, np.ndarray]:
+    """Load embedded/map_d alpha masks keyed by OBJ material name."""
+    mtl_name = next(
+        (
+            line.split(maxsplit=1)[1]
+            for line in obj_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line.startswith("mtllib ")
+        ),
+        None,
+    )
+    if mtl_name is None:
+        return {}
+    mtl_path = obj_path.parent / mtl_name
+    if not mtl_path.is_file():
+        return {}
+
+    bindings: Dict[str, Dict[str, Path]] = {}
+    material = None
+    for line in mtl_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        tokens = line.split(maxsplit=1)
+        if len(tokens) != 2:
+            continue
+        if tokens[0] == "newmtl":
+            material = tokens[1]
+        elif material is not None and tokens[0] in {"map_Kd", "map_d"}:
+            texture_path = _resolve_mtl_texture(mtl_path, tokens[1])
+            if texture_path is not None:
+                key = "opacity" if tokens[0] == "map_d" else "diffuse"
+                bindings.setdefault(material, {})[key] = texture_path
+
+    alpha_images = {}
+    for material, binding in bindings.items():
+        for image_path in (binding.get("opacity"), binding.get("diffuse")):
+            if image_path is None:
+                continue
+            try:
+                image = Image.open(image_path)
+                if "A" not in image.getbands() and "transparency" not in image.info:
+                    continue
+                alpha_images[material] = (
+                    np.asarray(image.convert("RGBA").getchannel("A"), dtype=np.float32)
+                    / 255.0
+                )
+                break
+            except OSError:
+                continue
+    return alpha_images
 
 
 class PyTorch3DScene(DifferentiableScene):
@@ -51,6 +220,18 @@ class PyTorch3DScene(DifferentiableScene):
         self.pos = torch.zeros(3, device=self.device)
         self.rot_deg = torch.zeros(3, device=self.device)  # yaw, pitch, roll
         self.ambient_intensity = torch.tensor(1.0, device=self.device)
+        self.light_position = torch.tensor(
+            config.LIGHT["position"], dtype=torch.float32, device=self.device
+        )
+        self.light_color = torch.tensor(
+            config.LIGHT["color"], dtype=torch.float32, device=self.device
+        )
+        self.fill_light_position = torch.tensor(
+            config.FILL_LIGHT["position"], dtype=torch.float32, device=self.device
+        )
+        self.fill_light_color = torch.tensor(
+            config.FILL_LIGHT["color"], dtype=torch.float32, device=self.device
+        )
 
         # Camera state
         self._cam_distance = 14
@@ -62,7 +243,9 @@ class PyTorch3DScene(DifferentiableScene):
         self._raster_settings = RasterizationSettings(
             image_size=self.image_size,
             blur_radius=0.0,
-            faces_per_pixel=1,
+            # Retain surfaces behind transparent leaf texels so cutouts reveal
+            # the building/other foliage instead of a blank background.
+            faces_per_pixel=4,
             # The road scene has many small faces in the same screen bins.
             # These settings prevent coarse-rasterization overflow and the
             # resulting incomplete geometry warnings.
@@ -100,8 +283,9 @@ class PyTorch3DScene(DifferentiableScene):
         are repeated within their own tile instead of leaking into a neighbor.
         """
         self._background_face_lower, self._background_face_upper = obj_face_bounds(path)
+        render_path = _pytorch3d_safe_obj(path)
         verts, faces, aux = load_obj(
-            path,
+            render_path,
             load_textures=True,
             device=self.device,
         )
@@ -119,14 +303,22 @@ class PyTorch3DScene(DifferentiableScene):
         # resolve.  Use a larger atlas only for full-resolution final renders.
         atlas_height = 512 if self.image_size <= 1024 else 1024
         gutter = 4
-        tiles = [torch.full(
-            (3, atlas_height + 2 * gutter, atlas_height + 2 * gutter),
+        neutral_tile = torch.full(
+            (4, atlas_height + 2 * gutter, atlas_height + 2 * gutter),
             0.18,
             dtype=torch.float32,
-        )]
+        )
+        neutral_tile[3] = 1.0
+        tiles = [neutral_tile]
         content_widths = [atlas_height]
         tile_widths = [atlas_height + 2 * gutter]
-        for texture in texture_images.values():
+        # ``faces.materials_idx`` indexes the distinct ``usemtl`` names in
+        # the OBJ, not just the subset whose ``map_Kd`` images loaded.  Keep
+        # the name associated with each atlas tile so sparse material indices
+        # can be resolved correctly below.
+        texture_tile_by_name = {}
+        alpha_images = _material_alpha_images(Path(path))
+        for material_name, texture in texture_images.items():
             # Resize the large source maps on CPU, then move only the compact
             # atlas to CUDA.  Moving the original 8K road map first causes an
             # unnecessary ~400 MB transient allocation.
@@ -141,25 +333,55 @@ class PyTorch3DScene(DifferentiableScene):
                 mode="bilinear",
                 align_corners=False,
             )
+            alpha = alpha_images.get(material_name)
+            if alpha is None:
+                alpha_image = torch.ones((1, 1, height, width), dtype=torch.float32)
+            else:
+                alpha_image = torch.from_numpy(alpha).reshape(1, 1, height, width)
+            alpha_image = F.interpolate(
+                alpha_image,
+                size=(atlas_height, tile_width),
+                mode="bilinear",
+                align_corners=False,
+            )
+            image = torch.cat((image, alpha_image), dim=1)
             # Replicate the edge texels around a tile.  Without this gutter,
             # bilinear filtering blends at an atlas boundary with the next
             # material and produces visible road/prop seams.
             tiles.append(F.pad(image[0], (gutter, gutter, gutter, gutter), mode="replicate"))
             content_widths.append(tile_width)
             tile_widths.append(tile_width + 2 * gutter)
+            texture_tile_by_name[material_name] = len(content_widths) - 1
 
         atlas_width = sum(tile_widths)
         texture_atlas = torch.cat(tiles, dim=2).permute(1, 2, 0).to(self.device)
 
         source_material_ids = faces.materials_idx.to(self.device)
-        if source_material_ids.max().item() >= len(texture_images):
-            raise ValueError("Background material indices do not match loaded textures")
-        # -1 means no material: map it to the neutral tile at index 0.
-        material_ids = torch.where(
-            source_material_ids >= 0,
-            source_material_ids + 1,
-            torch.zeros_like(source_material_ids),
+        # PyTorch3D assigns material indices in first-appearance order of the
+        # OBJ's ``usemtl`` directives.  A scene commonly has untextured
+        # materials interspersed with textured ones, so indexing atlas tiles
+        # directly by this ID is invalid (and caused the previous exception).
+        material_names = []
+        seen_material_names = set()
+        for line in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+            tokens = line.split()
+            if len(tokens) >= 2 and tokens[0] == "usemtl":
+                material_name = tokens[1]
+                if material_name not in seen_material_names:
+                    seen_material_names.add(material_name)
+                    material_names.append(material_name)
+        material_to_tile = torch.zeros(
+            len(material_names), dtype=torch.int64, device=self.device
         )
+        for index, material_name in enumerate(material_names):
+            material_to_tile[index] = texture_tile_by_name.get(material_name, 0)
+        valid_material = (source_material_ids >= 0) & (
+            source_material_ids < len(material_names)
+        )
+        # -1 (and any unrecognised material) means no usable texture: render
+        # it with the neutral atlas tile rather than failing the whole scene.
+        material_ids = torch.zeros_like(source_material_ids)
+        material_ids[valid_material] = material_to_tile[source_material_ids[valid_material]]
         widths = torch.tensor(content_widths, dtype=torch.float32, device=self.device)
         padded_widths = torch.tensor(tile_widths, dtype=torch.float32, device=self.device)
         offsets = torch.cat((
@@ -169,7 +391,13 @@ class PyTorch3DScene(DifferentiableScene):
 
         # UV indices may be shared by faces that use different materials.
         # Duplicate them per face before applying the material-tile transform.
-        face_uvs = aux.verts_uvs.to(self.device)[faces.textures_idx.to(self.device)].clone()
+        source_face_uvs = faces.textures_idx.to(self.device)
+        valid_uvs = source_face_uvs >= 0
+        # Some untextured OBJ faces have no ``vt`` reference.  ``-1`` would
+        # otherwise index the final UV entry; give those faces the neutral
+        # tile's centre instead.
+        face_uvs = aux.verts_uvs.to(self.device)[source_face_uvs.clamp_min(0)].clone()
+        face_uvs[~valid_uvs] = 0.5
 
         # Do not map an exact 1.0 UV endpoint back to 0.0.  The road is a
         # broad quad with UVs (0, 0) through (1, 1); plain modulo collapses
@@ -401,28 +629,30 @@ class PyTorch3DScene(DifferentiableScene):
         # ============================================================
         # 6. Lighting
         # ============================================================
-        lights = PointLights(
+        # Match Mitsuba's point-emitter radiometry.  Its diffuse BSDF applies
+        # a 1/pi term, so it belongs in this shader's light colour.
+        street_lights = InverseSquarePointLights(
             device=self.device,
-
-            # Position of the point light
-            location=[
-                [-2.0, 5.0, 5.0]
-            ],
-
-            # No ambient light
-            ambient_color=(
-                (0.0, 0.0, 0.0),
-            ),
-
-            # Main illumination from point light
+            location=self.light_position.unsqueeze(0),
+            ambient_color=((0.0, 0.0, 0.0),),
             diffuse_color=(
-                (0.7, 0.7, 0.7),
-            ),
-
-            # Very small specular highlight
-            specular_color=(
-                (0.05, 0.05, 0.05),
-            ),
+                self.light_color
+                * self.ambient_intensity
+                * (20.0 / np.pi)
+            ).unsqueeze(0),
+            # Mitsuba uses a purely diffuse BSDF for this scene.
+            specular_color=((0.0, 0.0, 0.0),),
+        )
+        fill_lights = InverseSquarePointLights(
+            device=self.device,
+            location=self.fill_light_position.unsqueeze(0),
+            ambient_color=((0.0, 0.0, 0.0),),
+            diffuse_color=(
+                self.fill_light_color
+                * config.FILL_LIGHT["intensity"]
+                * (20.0 / np.pi)
+            ).unsqueeze(0),
+            specular_color=((0.0, 0.0, 0.0),),
         )
 
         # ============================================================
@@ -436,21 +666,34 @@ class PyTorch3DScene(DifferentiableScene):
         # ============================================================
         # 8. Renderer
         # ============================================================
-        renderer = MeshRenderer(
+        def make_renderer(lights: PointLights) -> MeshRenderer:
+            return MeshRenderer(
             rasterizer=rasterizer,
-            shader=SoftPhongShader(
+            shader=AlphaCutoutPhongShader(
                 device=self.device,
                 cameras=cameras,
                 lights=lights,
             ),
-        )
+            )
+
+        street_renderer = make_renderer(street_lights)
+        fill_renderer = make_renderer(fill_lights)
+
+        def render_with_fixture_lights(mesh: Meshes) -> torch.Tensor:
+            """Sum two direct point-light passes; neither pass has ambient light."""
+            street = street_renderer(mesh)
+            fill = fill_renderer(mesh)
+            return torch.cat(
+                (street[..., :3] + fill[..., :3], torch.maximum(street[..., 3:4], fill[..., 3:4])),
+                dim=-1,
+            )
 
         # ============================================================
         # 9. Render
         # ============================================================
-        foreground = renderer(scene_mesh)
+        foreground = render_with_fixture_lights(scene_mesh)
         if self.background is not None and self._background_is_textured:
-            background = renderer(self.background)
+            background = render_with_fixture_lights(self.background)
             # SoftPhong's alpha can be fractional at a face even with no
             # intended transparency.  Use a hard rasterized silhouette for
             # compositing so the road texture cannot show through the human.

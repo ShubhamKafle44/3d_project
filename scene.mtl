@@ -1,0 +1,98 @@
+# Blender 5.2.2 LTS MTL File: 'scene.blend'
+# www.blender.org
+
+newmtl mat0
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/ConcreteBarrierAShader_baseColor.jpg
+map_Ns pipeline/assets/environment/ConcreteBarrierAShader_metallicRoughness.png
+map_refl pipeline/assets/environment/ConcreteBarrierAShader_metallicRoughness.png
+map_Bump pipeline/assets/environment/ConcreteBarrierAShader_normal.jpg
+
+newmtl mat1
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/ConcreteBarrierBShader_baseColor.jpg
+map_Ns pipeline/assets/environment/ConcreteBarrierBShader_metallicRoughness.png
+map_refl pipeline/assets/environment/ConcreteBarrierBShader_metallicRoughness.png
+map_Bump pipeline/assets/environment/ConcreteBarrierBShader_normal.jpg
+
+newmtl mat2
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/RoadWorksSignNewMat_baseColor.jpg
+map_Ns pipeline/assets/environment/RoadWorksSignNewMat_metallicRoughness.png
+map_refl pipeline/assets/environment/RoadWorksSignNewMat_metallicRoughness.png
+map_Bump pipeline/assets/environment/RoadWorksSignNewMat_normal.jpg
+
+newmtl mat3
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/RoadClosedNewMat_baseColor.jpg
+map_Ns pipeline/assets/environment/RoadClosedNewMat_metallicRoughness.png
+map_refl pipeline/assets/environment/RoadClosedNewMat_metallicRoughness.png
+map_Bump pipeline/assets/environment/RoadClosedNewMat_normal.jpg
+
+newmtl mat4
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/RoadWorksSignOldMat_baseColor.jpg
+map_Ns pipeline/assets/environment/RoadWorksSignOldMat_metallicRoughness.png
+map_refl pipeline/assets/environment/RoadWorksSignOldMat_metallicRoughness.png
+map_Bump pipeline/assets/environment/RoadWorksSignOldMat_normal.jpg
+
+newmtl mat5
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/RoadClosedOldMat_baseColor.jpg
+map_Ns pipeline/assets/environment/RoadClosedOldMat_metallicRoughness.png
+map_refl pipeline/assets/environment/RoadClosedOldMat_metallicRoughness.png
+map_Bump pipeline/assets/environment/RoadClosedOldMat_normal.jpg
+
+newmtl mat6
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/RoadShader_baseColor.jpg
+map_Ns pipeline/assets/environment/RoadShader_metallicRoughness.png
+map_refl pipeline/assets/environment/RoadShader_metallicRoughness.png
+map_Bump pipeline/assets/environment/RoadShader_normal.jpg
+
+newmtl mat7
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd pipeline/assets/environment/M_TrafficCones_baseColor.jpg
+map_Ns pipeline/assets/environment/M_TrafficCones_metallicRoughness.png
+map_refl pipeline/assets/environment/M_TrafficCones_metallicRoughness.png
+map_Bump pipeline/assets/environment/M_TrafficCones_normal.jpg

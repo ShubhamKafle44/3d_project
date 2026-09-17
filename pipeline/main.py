@@ -14,7 +14,7 @@ def main():
     # SETTINGS
     # =========================
 
-    renderer = "pytorch3d"
+    renderer = "mitsuba"
     # Other value: "pytorch3d", "mitsuba"
 
     property = "POSITION"
@@ -42,17 +42,20 @@ def main():
     print("Adversarial Search")
     print(f"Renderer : {renderer}")
     print(f"Detector : {model}")
-    attack_label = "3D shirt appearance" if (
-        renderer == "pytorch3d" and config.SEARCH["mode"] == "gradient_appearance"
-    ) else property
+    gradient_mode = (
+        renderer == "pytorch3d"
+        and config.SEARCH["mode"] == "gradient_appearance"
+        and property == "CLOTHING"
+    )
+    attack_label = "3D shirt appearance" if gradient_mode else property
     print(f"Property : {attack_label}")
     print(f"Device   : {device}")
     print("=" * 60)
 
-    gradient_mode = renderer == "pytorch3d" and config.SEARCH["mode"] == "gradient_appearance"
     scene_image_size = (
         config.SEARCH["gradient_image_size"] if gradient_mode
         else config.MITSUBA_IMAGE_SIZE if renderer == "mitsuba"
+        else config.PYTORCH3D_IMAGE_SIZE if renderer == "pytorch3d"
         else None
     )
     scene = build_human_scene(

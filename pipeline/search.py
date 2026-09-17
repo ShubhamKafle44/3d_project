@@ -42,7 +42,23 @@ def _set_property(scene: DifferentiableScene, prop: str, value) -> None:
 
 def _perturb(current, prop: str, step_size: float):
     lo, hi = config.PROPERTY_BOUNDS[prop]
-    if prop in ("POSITION", "ROTATION", "CLOTHING"):
+    if prop == "POSITION":
+        # Both scene formats are Y-up: the model's feet are near Y=0 and its
+        # height extends along Y.  Keep that grounding coordinate fixed and
+        # search only across the X/Z ground plane.
+        noise = np.array([
+            np.random.normal(0, step_size),
+            0.0,
+            np.random.normal(0, step_size),
+        ])
+        proposal = np.asarray(current) + noise
+        lower = np.asarray(lo)
+        upper = np.asarray(hi)
+        proposal[[0, 2]] = np.clip(
+            proposal[[0, 2]], lower[[0, 2]], upper[[0, 2]]
+        )
+        return proposal
+    if prop in ("ROTATION", "CLOTHING"):
         noise = np.random.normal(0, step_size, size=3)
         return np.clip(np.asarray(current) + noise, lo, hi)
     else:  # LIGHTING - scalar
@@ -94,6 +110,17 @@ def run_adversarial_search(
         print(f"Initial human_prob = {best_prob * 100:.2f}%")
         print(f"{'Step':>4} {'HumanProb':>10} {'Persons':>8}  {'TopLabel':<10} Parameters")
         print("-" * 70)
+
+    # There is nothing to optimize when the initial render already meets the
+    # requested detector threshold.  Besides avoiding unnecessary rendering,
+    # this keeps a POSITION search from proposing candidates after success.
+    if best_prob <= success_threshold:
+        if verbose:
+            print(
+                f"Success at step 0: human_prob {best_prob * 100:.2f}% <= "
+                f"{success_threshold * 100:.0f}%"
+            )
+        return SearchResult(True, 0, best_prob, best_img, best_value)
 
     for step in range(1, epochs + 1):
         proposal = _perturb(current_value, property_name, step_size)
