@@ -8,9 +8,6 @@ HUMAN_PARTS = {
 }
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
-
-# Multi-material road scene.  Keep this enabled so the render includes visual
-# context instead of falling back to a human-only close-up.
 BACKGROUND_PATH = "assets/environment/scene.obj"
 
 # Optional environment map used only by the Mitsuba backend for image-based lighting.
@@ -20,21 +17,13 @@ ENV_MAP_PATH = None  # e.g. "assets/scene/env.hdr"
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
-# Alpha-cutout foliage needs multiple depth layers in PyTorch3D.  Rendering
-# those layers at 2048px exceeds the 6 GB GPU target, so use the same compact
-# size as the gradient attack for normal PyTorch3D runs.
 PYTORCH3D_IMAGE_SIZE = 512
-# The attack runs at a smaller resolution to keep detector backpropagation in
-# GPU memory. Its winning parameters are rendered once more at this size for
-# the image written to disk.
 FINAL_RENDER_IMAGE_SIZE = 2048
-# Background maps are packed into an atlas. Keep the attack atlas compact,
-# while preserving source detail in the final render.
 FINAL_TEXTURE_ATLAS_HEIGHT = 2048
-# Mitsuba's OptiX path is substantially more memory hungry than PyTorch3D.
-# Keep its normal (non-gradient) renders within a 6 GB GPU budget.
 MITSUBA_IMAGE_SIZE = 1024
 MITSUBA_SPP = 8
+
+
 DEVICE = "cuda" if os.environ.get("FORCE_CPU") != "1" else "cpu"
 
 CAMERA = {
@@ -46,19 +35,12 @@ CAMERA = {
 }
 
 LIGHT = {
-    # OBJ/MTL has no light entities. These coordinates are the centre of the
-    # exported street-lamp bulb mesh (Object_4.001 / Bola_lampu.001).
-    # Clear the bulb mesh by more than half a scene unit.  A tiny offset can
-    # still leave the mathematical point source inside its enclosing faces,
-    # causing zero-distance light evaluations in Mitsuba.
+
     "intensity": 20.0,
     "position": (-5.0, 4.2, -19.07),
     "color": (1.0, 0.72, 0.38),
 }
 
-# This is a direct point-light fill, not a world/ambient illumination.  The
-# exported lamp is occluded from the camera-facing part of this scene, so a
-# small front fill prevents the render from becoming pure black.
 FILL_LIGHT = {
     "intensity": 2.0,
     "position": (-2.0, 5.0, 5.0),
@@ -84,8 +66,6 @@ SEARCH = {
     "min_cam_distance": 1.0,
     "gradient_learning_rate": 0.03,
     "gradient_validate_every": 10,
-    # Compact optimization sizes keep 3D+detector backprop viable on a 6 GB
-    # GPU.  The normal detector resolution is retained for validation.
     "gradient_image_size": 512,
     "gradient_detector_size": 384,
 }
