@@ -278,7 +278,6 @@ class MitsubaScene(DifferentiableScene):
         self.pos = np.zeros(3, dtype=np.float32)
         self.rot_deg = np.zeros(3, dtype=np.float32)  # yaw, pitch, roll
         self.ambient_intensity = 1.0
-        self.light_position = config.LIGHT.get("position", (2.0, 2.0, 2.0))
         self.light_color = config.LIGHT.get("color", (1.0, 1.0, 1.0))
 
         self._cam_distance = 3.0
@@ -286,8 +285,6 @@ class MitsubaScene(DifferentiableScene):
         self._cam_azim = 0.0
         self._cam_target = (0.0, 0.0, 0.0)
         self._cam_fov = 40.0
-
-        self._scene = None  
 
     # ---- asset loading ---------------------------------------------
     def load_mesh(self, path: str, name: str = "mesh") -> None:

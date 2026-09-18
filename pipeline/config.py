@@ -1,6 +1,4 @@
 
-import os
-
 HUMAN_PARTS = {
     "body": "assets/human/body.obj",
     "shirt": "assets/human/shirt.obj",
@@ -10,21 +8,13 @@ HUMAN_PARTS = {
 # Optional background/scene geometry (room, floor, props). None = plain background.
 BACKGROUND_PATH = "assets/environment/scene.obj"
 
-# Optional environment map used only by the Mitsuba backend for image-based lighting.
-ENV_MAP_PATH = None  # e.g. "assets/scene/env.hdr"
-
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
 PYTORCH3D_IMAGE_SIZE = 512
-FINAL_RENDER_IMAGE_SIZE = 2048
-FINAL_TEXTURE_ATLAS_HEIGHT = 2048
 MITSUBA_IMAGE_SIZE = 1024
 MITSUBA_SPP = 8
-
-
-DEVICE = "cuda" if os.environ.get("FORCE_CPU") != "1" else "cpu"
 
 CAMERA = {
     "distance": 8.5,
@@ -61,9 +51,6 @@ SEARCH = {
     "epochs": 100,
     "step_size": 1.0,
     "success_threshold": 0.05,      # stop once human_prob <= this
-    "target_coverage": (0.20, 0.45),  # auto-zoom band, fraction of frame
-    "max_zoom_iters": 10,
-    "min_cam_distance": 1.0,
     "gradient_learning_rate": 0.03,
     "gradient_validate_every": 10,
     "gradient_image_size": 512,
@@ -78,7 +65,6 @@ PROPERTY_BOUNDS = {
     "ROTATION": (0.0, 360.0),
     "LIGHTING": (0.05, 3.0),
     "CLOTHING": (0.0, 1.0),
-    "CAMERA": (-1.0, 1.0),  # relative nudge to elevation/azimuth in degrees*10
 }
 
 # Keep this much space between the subject bounding box and background meshes.
