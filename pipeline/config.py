@@ -48,20 +48,23 @@ DEFAULT_MATERIAL_COLORS = {
 # --------------------------------------------------------------------------
 SEARCH = {
     "mode": "gradient_appearance",  # "gradient_appearance" (PyTorch3D) or "random"
-    "epochs": 100,
-    "step_size": 1.0,
+    "epochs": 1000,
+    "step_size": 0.35,
     "success_threshold": 0.05,      # stop once human_prob <= this
-    "gradient_learning_rate": 0.03,
-    "gradient_validate_every": 10,
+    "gradient_learning_rate": 0.06,
+    "gradient_validate_every": 5,
     "gradient_image_size": 512,
     "gradient_detector_size": 384,
+    # The class-specific RoI term drives down person confidence, while the
+    # RPN term removes strong candidate boxes before classification.
+    "gradient_person_loss_weight": 1.0,
+    "gradient_rpn_loss_weight": 0.25,
 }
 
-# Bounds for each perturbable property, used to clip random search proposals.
+# Bounds for non-position properties, used to clip random search proposals.
+# POSITION is instead constrained by the projected subject bounds: its entire
+# bounding box must remain inside the image.
 PROPERTY_BOUNDS = {
-    # Keep a recognisable subject in frame: do not let a POSITION search
-    # "succeed" merely by moving the person below or behind the camera.
-    "POSITION": ((-0.6, -0.3, -0.4), (0.6, 0.3, 0.4)),
     "ROTATION": (0.0, 360.0),
     "LIGHTING": (0.05, 3.0),
     "CLOTHING": (0.0, 1.0),
@@ -70,3 +73,6 @@ PROPERTY_BOUNDS = {
 # Keep this much space between the subject bounding box and background meshes.
 # Position proposals that would intersect the static environment are discarded.
 POSITION_COLLISION_CLEARANCE = 0.03
+
+# Keep the person's projected bounding box this far from each image edge.
+POSITION_FRAME_MARGIN_PX = 8

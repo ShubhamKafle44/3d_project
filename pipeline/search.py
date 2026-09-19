@@ -41,23 +41,18 @@ def _set_property(scene: DifferentiableScene, prop: str, value) -> None:
 
 
 def _perturb(current, prop: str, step_size: float):
-    lo, hi = config.PROPERTY_BOUNDS[prop]
     if prop == "POSITION":
         # Both scene formats are Y-up: the model's feet are near Y=0 and its
-        # height extends along Y.  Keep that grounding coordinate fixed and
-        # search only across the X/Z ground plane.
+        # height extends along Y. Keep that grounding coordinate fixed and
+        # search only across the X/Z ground plane. The renderer rejects a
+        # proposal when its projected subject bounds leave the image.
         noise = np.array([
             np.random.normal(0, step_size),
             0.0,
             np.random.normal(0, step_size),
         ])
-        proposal = np.asarray(current) + noise
-        lower = np.asarray(lo)
-        upper = np.asarray(hi)
-        proposal[[0, 2]] = np.clip(
-            proposal[[0, 2]], lower[[0, 2]], upper[[0, 2]]
-        )
-        return proposal
+        return np.asarray(current) + noise
+    lo, hi = config.PROPERTY_BOUNDS[prop]
     if prop in ("ROTATION", "CLOTHING"):
         noise = np.random.normal(0, step_size, size=3)
         return np.clip(np.asarray(current) + noise, lo, hi)
@@ -71,6 +66,17 @@ def _format_property(prop: str, value) -> str:
         a, b, c = np.asarray(value).tolist()
         return f"{prop.lower()}=({a:+.3f}, {b:+.3f}, {c:+.3f})"
     return f"{prop.lower()}=({float(value):+.3f})"
+
+
+def _format_scene_parameters(scene: DifferentiableScene, shirt_colors: torch.Tensor) -> str:
+    """Summarize the differentiable attack state without printing every vertex."""
+    mean_shirt_color = shirt_colors.detach().mean(dim=0).cpu().numpy()
+    return " ".join((
+        _format_property("POSITION", scene.get_position()),
+        _format_property("ROTATION", scene.get_rotation_deg()),
+        _format_property("LIGHTING", scene.get_lighting()),
+        _format_property("CLOTHING", mean_shirt_color),
+    ))
 
 
 @dataclass
@@ -126,7 +132,7 @@ def run_adversarial_search(
         proposal = _perturb(current_value, property_name, step_size)
         if property_name == "POSITION" and not scene.is_position_valid(proposal):
             if verbose:
-                print(f"{step:4d} {'rejected':>10} {'collision':>8}  {'':<10} "
+                print(f"{step:4d} {'rejected':>10} {'invalid':>8}  {'':<10} "
                       f"{_format_property(property_name, proposal)}")
             continue
         _set_property(scene, property_name, proposal)
@@ -204,15 +210,21 @@ def run_3d_appearance_attack(
 
     if verbose:
         print(f"Initial human_prob = {best_prob * 100:.2f}%")
-        print(f"{'Step':>4} {'Surrogate':>10} {'HumanProb':>10} {'Persons':>8}")
-        print("-" * 46)
+        print(
+            f"{'Step':>4} {'Surrogate':>10} {'HumanProb':>10} "
+            "Parameters"
+        )
+        print("-" * 150)
 
     for step in range(1, epochs + 1):
         colors = torch.sigmoid(color_logits)
         scene.set_vertex_colors("shirt", colors)
         rendered = scene.render_differentiable()
-        loss = classifier.rpn_objectness_loss(
-            rendered, input_size=detector_input_size
+        loss = classifier.person_detection_loss(
+            rendered,
+            input_size=detector_input_size,
+            person_weight=config.SEARCH["gradient_person_loss_weight"],
+            rpn_weight=config.SEARCH["gradient_rpn_loss_weight"],
         )
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -230,7 +242,11 @@ def run_3d_appearance_attack(
             best_prob, best_step, best_img = human_prob, step, image_np.copy()
             best_colors = torch.sigmoid(color_logits).detach().clone()
         if verbose:
-            print(f"{step:4d} {loss.item():10.4f} {human_prob * 100:9.2f}% {result['num_persons']:8d}")
+            parameters = _format_scene_parameters(scene, torch.sigmoid(color_logits))
+            print(
+                f"{step:4d} {loss.item():10.4f} {human_prob * 100:9.2f}% "
+                f"{parameters}"
+            )
         if best_prob <= success_threshold:
             break
 

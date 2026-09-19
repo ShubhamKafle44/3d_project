@@ -48,6 +48,13 @@ python main.py --renderer pytorch3d --property LIGHTING --model retinanet_resnet
 python main.py --renderer mitsuba --property ROTATION --epochs 300 --step-size 0.2
 ```
 
+The checked-in `main.py` defaults to `pytorch3d` plus `CLOTHING` with
+`SEARCH["mode"] = "gradient_appearance"`.  That mode differentiates from
+the rendered shirt vertex colors through Faster R-CNN's pre-NMS proposal and
+person-class logits, then saves the best validated render with the same PNG
+output name and format as random search.  Use the Faster R-CNN model for this
+mode; RetinaNet remains available for black-box (`random`) search.
+
 You only ever specify **what to target** (`--property`) and **which
 renderer/detector to test** — mesh loading, camera setup, and the search
 loop are all handled internally from `config.py`.

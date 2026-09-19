@@ -71,22 +71,82 @@ class HumanDetectionClassifier:
     def human_probability(self, img) -> float:
         return self.classify(img)["human_prob"]
 
-    def rpn_objectness_loss(
-        self, image: torch.Tensor, topk: int = 256, input_size: int = 384
+    def person_detection_loss(
+        self,
+        image: torch.Tensor,
+        topk: int = 256,
+        input_size: int = 384,
+        person_weight: float = 1.0,
+        rpn_weight: float = 0.25,
     ) -> torch.Tensor:
-        """Differentiable surrogate that suppresses the detector's proposals.
+        """Differentiable Faster R-CNN surrogate for reducing *person* scores.
 
-        Detection scores returned by Faster R-CNN are post-NMS and cannot be
-        differentiated reliably.  The RPN logits occur before proposal
-        filtering, so minimizing their largest values supplies a useful image
-        gradient for a rendered 3D appearance attack.
+        Final detector boxes pass through thresholding and NMS, so their
+        scores are unsuitable as an autograd objective.  This loss instead
+        uses the pre-NMS RPN logits and the RoI classifier logits for COCO's
+        person class.  NMS only selects the RoIs; gradients still flow from
+        their class logits through the detector and rendered RGB image.
         """
         if image.ndim != 3 or image.shape[0] != 3:
             raise ValueError("expected a differentiable RGB image shaped [3, H, W]")
+        if not hasattr(self.model, "rpn") or not hasattr(self.model, "roi_heads"):
+            raise TypeError(
+                "person_detection_loss requires a Faster R-CNN-style detector"
+            )
         image = image.to(self.device, dtype=torch.float32).clamp(0.0, 1.0)
         # The normal detector transform upsamples inputs to 800px, which is
         # wasteful during backpropagation on a small GPU.  Use a compact
         # surrogate pass; the unmodified detector is still used for validation.
+        transform = self.model.transform
+        original_min_size, original_max_size = transform.min_size, transform.max_size
+        transform.min_size, transform.max_size = (input_size,), input_size
+        try:
+            images, _ = transform([image], None)
+        finally:
+            transform.min_size, transform.max_size = original_min_size, original_max_size
+        features = self.model.backbone(images.tensors)
+        if isinstance(features, torch.Tensor):
+            features = {"0": features}
+        objectness, _ = self.model.rpn.head(list(features.values()))
+        logits = torch.cat([level.reshape(-1) for level in objectness])
+        strongest = torch.topk(logits, k=min(topk, logits.numel())).values
+        rpn_loss = F.softplus(strongest).mean()
+
+        # ``rpn`` performs non-differentiable proposal filtering, but that is
+        # only used to choose pooling regions.  The pooled feature values and
+        # class logits retain their gradient path to ``image``.
+        proposals, _ = self.model.rpn(images, features, None)
+        box_features = self.model.roi_heads.box_roi_pool(
+            features, proposals, images.image_sizes
+        )
+        box_features = self.model.roi_heads.box_head(box_features)
+        class_logits, _ = self.model.roi_heads.box_predictor(box_features)
+        if class_logits.numel() == 0:
+            return rpn_weight * rpn_loss
+
+        person_logits = class_logits[:, COCO_PERSON_IDX]
+        non_person_logits = torch.cat(
+            (class_logits[:, :COCO_PERSON_IDX], class_logits[:, COCO_PERSON_IDX + 1 :]),
+            dim=1,
+        )
+        # Margin to the strongest competing category is more stable than
+        # optimizing a post-softmax probability (which can saturate early).
+        person_margin = person_logits - non_person_logits.logsumexp(dim=1)
+        strongest_person = torch.topk(
+            person_margin, k=min(topk, person_margin.numel())
+        ).values
+        person_loss = F.softplus(strongest_person).mean()
+        return person_weight * person_loss + rpn_weight * rpn_loss
+
+    # Backward-compatible proposal-only objective for existing callers.
+    def rpn_objectness_loss(
+        self, image: torch.Tensor, topk: int = 256, input_size: int = 384
+    ) -> torch.Tensor:
+        if image.ndim != 3 or image.shape[0] != 3:
+            raise ValueError("expected a differentiable RGB image shaped [3, H, W]")
+        if not hasattr(self.model, "rpn"):
+            raise TypeError("rpn_objectness_loss requires an RPN-style detector")
+        image = image.to(self.device, dtype=torch.float32).clamp(0.0, 1.0)
         transform = self.model.transform
         original_min_size, original_max_size = transform.min_size, transform.max_size
         transform.min_size, transform.max_size = (input_size,), input_size

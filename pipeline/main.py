@@ -14,11 +14,13 @@ def main():
     # SETTINGS
     # =========================
 
-    renderer = "mitsuba"
+    renderer = "pytorch3d"
     # Other value: "pytorch3d", "mitsuba"
 
+    # Search only the person's ground-plane position. The result is written
+    # using the unchanged adversarial_result_<...>.png naming convention.
     property = "POSITION"
-    # Examples: "LIGHTING", "APPEARANCE", "POSITION"
+    # Examples: "LIGHTING", "CLOTHING", "POSITION"
 
     model = "fasterrcnn_resnet50_fpn_v2"
     # Other value: "retinanet_resnet50_fpn_v2", "fasterrcnn_resnet50_fpn_v2"
@@ -47,6 +49,11 @@ def main():
         and config.SEARCH["mode"] == "gradient_appearance"
         and property == "CLOTHING"
     )
+    if gradient_mode and not model.startswith("fasterrcnn_"):
+        raise ValueError(
+            "gradient_appearance currently requires a Faster R-CNN detector; "
+            "use fasterrcnn_resnet50_fpn_v2 or set SEARCH['mode'] to 'random'."
+        )
     attack_label = "3D shirt appearance" if gradient_mode else property
     print(f"Property : {attack_label}")
     print(f"Device   : {device}")

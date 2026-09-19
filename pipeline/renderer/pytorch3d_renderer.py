@@ -445,6 +445,8 @@ class PyTorch3DScene(DifferentiableScene):
         return self.pos.detach().cpu().numpy().copy()
 
     def is_position_valid(self, position: np.ndarray) -> bool:
+        if not self._is_subject_in_frame(position):
+            return False
         if self._background_face_lower is None or self._subject_lower is None:
             return True
         offset = np.asarray(position, dtype=np.float32)
@@ -455,6 +457,45 @@ class PyTorch3DScene(DifferentiableScene):
             self._background_face_upper,
             config.POSITION_COLLISION_CLEARANCE,
         )
+
+    def _is_subject_in_frame(self, position: np.ndarray) -> bool:
+        """Return whether the transformed subject bounding box fits the image."""
+        if self._subject_lower is None or self._subject_upper is None:
+            return True
+        lower, upper = self._subject_lower, self._subject_upper
+        corners = np.array(
+            [[x, y, z] for x in (lower[0], upper[0])
+             for y in (lower[1], upper[1])
+             for z in (lower[2], upper[2])],
+            dtype=np.float32,
+        )
+        with torch.no_grad():
+            points = torch.as_tensor(corners, device=self.device)
+            rotation = self._rotation_matrix()
+            offset = torch.as_tensor(position, dtype=torch.float32, device=self.device)
+            points = points @ rotation.T + offset
+            R, T = look_at_view_transform(
+                dist=self._cam_distance,
+                elev=self._cam_elev,
+                azim=self._cam_azim,
+                at=(self._cam_target,),
+                device=self.device,
+            )
+            cameras = FoVPerspectiveCameras(
+                device=self.device, R=R, T=T, fov=self._cam_fov
+            )
+            screen_points = cameras.transform_points_screen(
+                points.unsqueeze(0), image_size=((self.image_size, self.image_size),)
+            )[0]
+            margin = config.POSITION_FRAME_MARGIN_PX
+            x, y, depth = screen_points.unbind(dim=1)
+            return bool(
+                (depth > 0).all()
+                and (x >= margin).all()
+                and (x <= self.image_size - 1 - margin).all()
+                and (y >= margin).all()
+                and (y <= self.image_size - 1 - margin).all()
+            )
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
         self.rot_deg = torch.tensor([yaw, pitch, roll], device=self.device, dtype=torch.float32)
