@@ -419,8 +419,14 @@ class MitsubaScene(DifferentiableScene):
                 "radiance": {
                     "type": "rgb",
                     "value": [
-                        component * self.ambient_intensity * 0.15
-                        for component in self.light_color
+                        component * (
+                            self.ambient_intensity * 0.15
+                            + float(config.AMBIENT_LIGHT["intensity"])
+                            * float(ambient_component)
+                        )
+                        for component, ambient_component in zip(
+                            self.light_color, config.AMBIENT_LIGHT["color"]
+                        )
                     ],
                 },
             },

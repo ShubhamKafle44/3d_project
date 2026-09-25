@@ -671,11 +671,17 @@ class PyTorch3DScene(DifferentiableScene):
         # 6. Lighting
         # ============================================================
         # Match Mitsuba's point-emitter radiometry.  Its diffuse BSDF applies
-        # a 1/pi term, so it belongs in this shader's light colour.
+        # a 1/pi term, so it belongs in this shader's light colour. Ambient
+        # illumination is independent of both point-light intensities.
+        ambient_intensity = float(config.AMBIENT_LIGHT["intensity"])
+        ambient_rgb = tuple(
+            float(channel) * ambient_intensity
+            for channel in config.AMBIENT_LIGHT["color"]
+        )
         street_lights = InverseSquarePointLights(
             device=self.device,
             location=self.light_position.unsqueeze(0),
-            ambient_color=((0.0, 0.0, 0.0),),
+            ambient_color=(ambient_rgb,),
             diffuse_color=(
                 self.light_color
                 * self.ambient_intensity

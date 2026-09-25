@@ -1,6 +1,6 @@
 # Blender 5.2.2 LTS
 # www.blender.org
-mtllib body.mtl
+mtllib body.pytorch3d_safe.mtl
 o Ch01_Body
 v 0.262179 0.081521 0.040077
 v 0.268876 0.081477 0.056006

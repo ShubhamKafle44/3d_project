@@ -12,7 +12,7 @@ either renderer with the same CLI.
 config.py              # <- point this at your real .obj files
 detector.py             # COCO detector wrapper -> human_prob score
 scene_setup.py          # builds a scene from config.py, auto-frames subject
-search.py               # black-box random search over one scene property
+search.py               # black-box random search over scene properties
 main.py                 # CLI entrypoint
 renderer/
   base.py                # DifferentiableScene interface both backends implement
@@ -28,7 +28,7 @@ pip install -r requirements.txt
 # PyTorch3D needs a separate, environment-matched install - see requirements.txt
 ```
 
-1. Put your human `.obj` (and any part meshes: shirt/pants/etc., or scene
+1. Put your human `.obj` (and any part meshes: shirt/pants/shoes/etc., or scene
    background) somewhere under `assets/`.
 2. Edit `config.py`:
    - `HUMAN_PARTS` -> your mesh path(s)
@@ -38,8 +38,8 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-# Mitsuba backend, perturb position (default)
-python main.py --renderer mitsuba --property POSITION
+# Mitsuba backend, optimize position and orientation together (POSE)
+python main.py --renderer mitsuba --property POSE
 
 # PyTorch3D backend, perturb lighting, RetinaNet detector
 python main.py --renderer pytorch3d --property LIGHTING --model retinanet_resnet50_fpn_v2
@@ -60,8 +60,9 @@ renderer/detector to test** — mesh loading, camera setup, and the search
 loop are all handled internally from `config.py`.
 
 `--property` options:
-- `POSITION` — translate the human in x/y/z
-- `ROTATION` — yaw/pitch/roll the human
+- `POSE` — jointly optimize ground-plane position and yaw while keeping the person upright (default in main.py)
+- `POSITION` — translate the human on the x/z ground plane
+- `ROTATION` — yaw the upright human (pitch and roll stay at zero)
 - `LIGHTING` — scalar light intensity
 - `CLOTHING` — shirt RGB color (requires a `shirt` part in `HUMAN_PARTS`)
 

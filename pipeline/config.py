@@ -3,6 +3,7 @@ HUMAN_PARTS = {
     "body": "assets/human/body.obj",
     "shirt": "assets/human/shirt.obj",
     "pants": "assets/human/pants.obj",
+    "shoes_and_eyelash": "assets/human/shoes_and_eyelash.obj",
 }
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
@@ -19,15 +20,14 @@ MITSUBA_SPP = 8
 CAMERA = {
     "distance": 8.5,
     "elevation": 10.0,
-    "azimuth": -8.0,
+    "azimuth": -25.0,
     "target": (0.0, 0.9, 0.0),
     "fov": 45.0,
 }
 
 LIGHT = {
-
-    "intensity": 20.0,
-    "position": (-5.0, 4.2, -19.07),
+    "intensity": 30.0,
+    "position": (-2.0, 4.2, -19.07),
     "color": (1.0, 0.72, 0.38),
 }
 
@@ -37,10 +37,17 @@ FILL_LIGHT = {
     "color": (1.0, 0.82, 0.65),
 }
 
+# Uniform, direction-independent illumination, separate from the point lights.
+AMBIENT_LIGHT = {
+    "intensity": 0.35,
+    "color": (1.0, 1.0, 1.0),
+}
+
 DEFAULT_MATERIAL_COLORS = {
     "body": (0.9, 0.75, 0.65),
     "shirt": (0.2, 0.4, 0.8),
     "pants": (0.15, 0.15, 0.15),
+    "shoes_and_eyelash": (0.08, 0.06, 0.04),
 }
 
 # --------------------------------------------------------------------------
@@ -48,8 +55,10 @@ DEFAULT_MATERIAL_COLORS = {
 # --------------------------------------------------------------------------
 SEARCH = {
     "mode": "gradient_appearance",  # "gradient_appearance" (PyTorch3D) or "random"
-    "epochs": 1000,
-    "step_size": 0.35,
+    "epochs": 10,
+    "step_size": 2.0,
+    "pose_position_step": 0.1,
+    "pose_rotation_step_deg": 10.0,
     "success_threshold": 0.05,      # stop once human_prob <= this
     "gradient_learning_rate": 0.06,
     "gradient_validate_every": 5,

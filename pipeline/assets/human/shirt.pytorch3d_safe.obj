@@ -1,6 +1,6 @@
 # Blender 5.2.2 LTS
 # www.blender.org
-mtllib shirt.mtl
+mtllib shirt.pytorch3d_safe.mtl
 o Ch01_Shirt
 v -0.055716 1.496318 -0.013034
 v -0.092958 1.503191 0.025378

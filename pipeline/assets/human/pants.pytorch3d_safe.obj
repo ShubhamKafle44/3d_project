@@ -1,6 +1,6 @@
 # Blender 5.2.2 LTS
 # www.blender.org
-mtllib pants.mtl
+mtllib pants.pytorch3d_safe.mtl
 o Ch01_Pants
 v 0.174401 0.140957 0.011430
 v 0.163220 0.154324 0.019042

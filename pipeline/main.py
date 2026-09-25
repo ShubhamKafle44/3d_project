@@ -17,12 +17,11 @@ def main():
     renderer = "pytorch3d"
     # Other value: "pytorch3d", "mitsuba"
 
-    # Search only the person's ground-plane position. The result is written
-    # using the unchanged adversarial_result_<...>.png naming convention.
+    # Jointly optimize ground-plane position and yaw, pitch, and roll.
     property = "POSITION"
-    # Examples: "LIGHTING", "CLOTHING", "POSITION"
+    # Other targets: "POSITION", "POSE", "LIGHTING", "CLOTHING"
 
-    model = "fasterrcnn_resnet50_fpn_v2"
+    model = "retinanet_resnet50_fpn_v2"
     # Other value: "retinanet_resnet50_fpn_v2", "fasterrcnn_resnet50_fpn_v2"
 
     epochs = config.SEARCH["epochs"]

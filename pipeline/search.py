@@ -12,14 +12,20 @@ from renderer import DifferentiableScene
 if TYPE_CHECKING:
     from detector import HumanDetectionClassifier
 
-PROPERTIES = ("POSITION", "ROTATION", "LIGHTING", "CLOTHING")
+PROPERTIES = ("POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING")
 
 
 def _get_property(scene: DifferentiableScene, prop: str):
     if prop == "POSITION":
         return scene.get_position()
     if prop == "ROTATION":
-        return scene.get_rotation_deg()
+        rotation = scene.get_rotation_deg()
+        rotation[1:] = 0.0
+        return rotation
+    if prop == "POSE":
+        rotation = scene.get_rotation_deg()
+        rotation[1:] = 0.0
+        return (scene.get_position(), rotation)
     if prop == "LIGHTING":
         return scene.get_lighting()
     if prop == "CLOTHING":
@@ -32,6 +38,11 @@ def _set_property(scene: DifferentiableScene, prop: str, value) -> None:
         scene.set_position(*value)
     elif prop == "ROTATION":
         scene.set_rotation_deg(*value)
+    elif prop == "POSE":
+        position, rotation = value
+        # PyTorch3D projects bounds using the current orientation.
+        scene.set_rotation_deg(*rotation)
+        scene.set_position(*position)
     elif prop == "LIGHTING":
         scene.set_lighting(float(value))
     elif prop == "CLOTHING":
@@ -41,6 +52,17 @@ def _set_property(scene: DifferentiableScene, prop: str, value) -> None:
 
 
 def _perturb(current, prop: str, step_size: float):
+    if prop == "POSE":
+        position, rotation = current
+        position_step = config.SEARCH.get("pose_position_step", 0.1)
+        rotation_step = config.SEARCH.get("pose_rotation_step_deg", 10.0)
+        position_noise = np.array([np.random.normal(0, position_step), 0.0,
+                                   np.random.normal(0, position_step)])
+        # Keep the person upright: only yaw (rotation about the vertical
+        # axis) is a search variable. Pitch and roll are fixed at zero.
+        yaw = (float(rotation[0]) + np.random.normal(0, rotation_step)) % 360.0
+        return (np.asarray(position) + position_noise,
+                np.array([yaw, 0.0, 0.0], dtype=np.float32))
     if prop == "POSITION":
         # Both scene formats are Y-up: the model's feet are near Y=0 and its
         # height extends along Y. Keep that grounding coordinate fixed and
@@ -53,7 +75,11 @@ def _perturb(current, prop: str, step_size: float):
         ])
         return np.asarray(current) + noise
     lo, hi = config.PROPERTY_BOUNDS[prop]
-    if prop in ("ROTATION", "CLOTHING"):
+    if prop == "ROTATION":
+        # Yaw only; pitch and roll tilt the person away from upright.
+        yaw = (float(np.asarray(current)[0]) + np.random.normal(0, step_size)) % 360.0
+        return np.array([yaw, 0.0, 0.0], dtype=np.float32)
+    if prop == "CLOTHING":
         noise = np.random.normal(0, step_size, size=3)
         return np.clip(np.asarray(current) + noise, lo, hi)
     else:  # LIGHTING - scalar
@@ -62,6 +88,10 @@ def _perturb(current, prop: str, step_size: float):
 
 
 def _format_property(prop: str, value) -> str:
+    if prop == "POSE":
+        position, rotation = value
+        return (f"position=({position[0]:+.3f}, {position[1]:+.3f}, {position[2]:+.3f}) "
+                f"yaw={rotation[0]:+.1f}° (pitch=0°, roll=0°)")
     if prop in ("POSITION", "ROTATION", "CLOTHING"):
         a, b, c = np.asarray(value).tolist()
         return f"{prop.lower()}=({a:+.3f}, {b:+.3f}, {c:+.3f})"
@@ -101,6 +131,11 @@ def run_adversarial_search(
         raise ValueError(f"property must be one of {PROPERTIES}, got {property_name!r}")
     success_threshold = success_threshold if success_threshold is not None else config.SEARCH["success_threshold"]
 
+    # Start upright as well as keeping every proposed orientation upright.
+    if property_name in ("ROTATION", "POSE"):
+        initial_yaw = float(scene.get_rotation_deg()[0])
+        scene.set_rotation_deg(initial_yaw, 0.0, 0.0)
+
     initial_img = scene.render()
     if initial_img is None:
         raise RuntimeError("Initial render returned None - check mesh paths in config.py")
@@ -130,6 +165,15 @@ def run_adversarial_search(
 
     for step in range(1, epochs + 1):
         proposal = _perturb(current_value, property_name, step_size)
+        if property_name == "POSE":
+            scene.set_rotation_deg(*proposal[1])
+            valid_position = scene.is_position_valid(proposal[0])
+            _set_property(scene, property_name, current_value)
+            if not valid_position:
+                if verbose:
+                    print(f"{step:4d} {'rejected':>10} {'invalid':>8}  {'':<10} "
+                          f"{_format_property(property_name, proposal)}")
+                continue
         if property_name == "POSITION" and not scene.is_position_valid(proposal):
             if verbose:
                 print(f"{step:4d} {'rejected':>10} {'invalid':>8}  {'':<10} "

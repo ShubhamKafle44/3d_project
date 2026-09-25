@@ -1,7 +1,7 @@
-# Blender 5.2.0 LTS MTL File: 'None'
+# Blender 5.2.2 LTS MTL File: 'None'
 # www.blender.org
 
-newmtl Ch01_body.001
+newmtl Ch01_body
 Ka 1.000000 1.000000 1.000000
 Ks 1.000000 1.000000 1.000000
 Ke 0.000000 0.000000 0.000000
