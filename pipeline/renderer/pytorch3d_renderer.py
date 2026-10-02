@@ -217,9 +217,12 @@ class PyTorch3DScene(DifferentiableScene):
         self._background_face_upper: Optional[np.ndarray] = None
 
         # Adversary-controlled parameters (Tensors for Autograd)
-        self.pos = torch.zeros(3, device=self.device)
+        # Keep the two shared adversary controls as optimizer-ready leaves.
+        self.pos = torch.zeros(3, device=self.device, requires_grad=True)
         self.rot_deg = torch.zeros(3, device=self.device)  # yaw, pitch, roll
-        self.ambient_intensity = torch.tensor(1.0, device=self.device)
+        self.ambient_intensity = torch.tensor(
+            1.0, device=self.device, requires_grad=True
+        )
         self.light_position = torch.tensor(
             config.LIGHT["position"], dtype=torch.float32, device=self.device
         )
@@ -439,7 +442,9 @@ class PyTorch3DScene(DifferentiableScene):
     def set_position(self, x: float, y: float, z: float) -> None:
         candidate = np.array([x, y, z], dtype=np.float32)
         if self.is_position_valid(candidate):
-            self.pos = torch.tensor(candidate, device=self.device, dtype=torch.float32)
+            self.pos = torch.tensor(
+                candidate, device=self.device, dtype=torch.float32, requires_grad=True
+            )
 
     def get_position(self) -> np.ndarray:
         return self.pos.detach().cpu().numpy().copy()
@@ -505,7 +510,9 @@ class PyTorch3DScene(DifferentiableScene):
 
     # ---- lighting -----------------------------------------------------
     def set_lighting(self, intensity: float) -> None:
-        self.ambient_intensity = torch.tensor(float(intensity), device=self.device)
+        self.ambient_intensity = torch.tensor(
+            float(intensity), device=self.device, requires_grad=True
+        )
 
     def get_lighting(self) -> float:
         return float(self.ambient_intensity.detach().cpu().item())
@@ -755,3 +762,7 @@ class PyTorch3DScene(DifferentiableScene):
         img = images[0, ..., :3].clamp(0.0, 1.0)
 
         return img.permute(2, 0, 1)
+
+    def differentiable_parameters(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Return the shared optimizer leaves: group position and light scale."""
+        return self.pos, self.ambient_intensity

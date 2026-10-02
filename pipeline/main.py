@@ -14,7 +14,7 @@ def main():
     # SETTINGS
     # =========================
 
-    renderer = "pytorch3d"
+    renderer = "mitsuba"  # Other value: "mitsuba"
     # Other value: "pytorch3d", "mitsuba"
 
     # Jointly optimize ground-plane position and yaw, pitch, and roll.

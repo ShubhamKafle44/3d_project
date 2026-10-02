@@ -7,15 +7,15 @@ HUMAN_PARTS = {
 }
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
-BACKGROUND_PATH = "assets/environment/scene.obj"
+BACKGROUND_PATH = "assets/studio/environment.obj"
 
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
 PYTORCH3D_IMAGE_SIZE = 512
-MITSUBA_IMAGE_SIZE = 1024
-MITSUBA_SPP = 8
+MITSUBA_IMAGE_SIZE = 2048
+MITSUBA_SPP = 20
 
 CAMERA = {
     "distance": 8.5,
@@ -39,7 +39,7 @@ FILL_LIGHT = {
 
 # Uniform, direction-independent illumination, separate from the point lights.
 AMBIENT_LIGHT = {
-    "intensity": 0.35,
+    "intensity": 0.25,
     "color": (1.0, 1.0, 1.0),
 }
 
@@ -64,24 +64,16 @@ SEARCH = {
     "gradient_validate_every": 5,
     "gradient_image_size": 512,
     "gradient_detector_size": 384,
-    # The class-specific RoI term drives down person confidence, while the
-    # RPN term removes strong candidate boxes before classification.
     "gradient_person_loss_weight": 1.0,
     "gradient_rpn_loss_weight": 0.25,
 }
 
-# Bounds for non-position properties, used to clip random search proposals.
-# POSITION is instead constrained by the projected subject bounds: its entire
-# bounding box must remain inside the image.
 PROPERTY_BOUNDS = {
     "ROTATION": (0.0, 360.0),
     "LIGHTING": (0.05, 3.0),
     "CLOTHING": (0.0, 1.0),
 }
 
-# Keep this much space between the subject bounding box and background meshes.
-# Position proposals that would intersect the static environment are discarded.
 POSITION_COLLISION_CLEARANCE = 0.03
 
-# Keep the person's projected bounding box this far from each image edge.
 POSITION_FRAME_MARGIN_PX = 8

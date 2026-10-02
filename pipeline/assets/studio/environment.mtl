@@ -1,0 +1,206 @@
+# Blender 5.2.2 LTS MTL File: 'Untitled.blend'
+# www.blender.org
+
+newmtl 06___Default
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd building03_c.tga
+
+newmtl 09___Default
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd building05 _c.tga
+
+newmtl 20___Default
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Kd 0.309800 0.454900 0.058800
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+
+newmtl 20___Defaulta
+Ns 29.999998
+Ka 1.000000 1.000000 1.000000
+Kd 0.270600 0.270600 0.270600
+Ks 0.144000 0.144000 0.144000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+
+newmtl 21___Default
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Kd 0.880872 0.880872 0.880872
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+
+newmtl 3db___building_06
+Ns 43.999985
+Ka 1.000000 1.000000 1.000000
+Ks 0.324000 0.324000 0.324000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd building 06_ c.tga
+
+newmtl Bark_Mat
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.142073 0.142073 0.142073
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Image_0.003.jpg
+map_Bump -bm 1.000000 Image_5.png
+
+newmtl Building_dnt
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd Building_V02_C.png
+
+newmtl Cluster_Mat_Early_autumn_EX
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.008014 0.008014 0.008014
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_Kd Image_60.png
+map_d Image_60.png
+map_Bump -bm 1.000000 Image_62.png
+
+newmtl Material__0
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd Building_V01_C.png
+
+newmtl building_025
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd building_025_c.tga
+
+newmtl building_16
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd building_016_c.tga
+
+newmtl mat0
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd ConcreteBarrierAShader_baseColor.jpg
+map_Ns ConcreteBarrierAShader_metallicRoughness.png
+map_refl ConcreteBarrierAShader_metallicRoughness.png
+map_Bump ConcreteBarrierAShader_normal.jpg
+
+newmtl mat2
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd RoadWorksSignNewMat_baseColor.jpg
+map_Ns RoadWorksSignNewMat_metallicRoughness.png
+map_refl RoadWorksSignNewMat_metallicRoughness.png
+map_Bump RoadWorksSignNewMat_normal.jpg
+
+newmtl mat3
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd RoadClosedNewMat_baseColor.jpg
+map_Ns RoadClosedNewMat_metallicRoughness.png
+map_refl RoadClosedNewMat_metallicRoughness.png
+map_Bump RoadClosedNewMat_normal.jpg
+
+newmtl mat4
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd RoadWorksSignOldMat_baseColor.jpg
+map_Ns RoadWorksSignOldMat_metallicRoughness.png
+map_refl RoadWorksSignOldMat_metallicRoughness.png
+map_Bump RoadWorksSignOldMat_normal.jpg
+
+newmtl mat5
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd RoadClosedOldMat_baseColor.jpg
+map_Ns RoadClosedOldMat_metallicRoughness.png
+map_refl RoadClosedOldMat_metallicRoughness.png
+map_Bump RoadClosedOldMat_normal.jpg
+
+newmtl mat7
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd M_TrafficCones_baseColor.jpg
+map_Ns M_TrafficCones_metallicRoughness.png
+map_refl M_TrafficCones_metallicRoughness.png
+map_Bump M_TrafficCones_normal.jpg
+
+newmtl orig_orig_orig_17___Default
+Ns 100.000015
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd building 01_c.tga

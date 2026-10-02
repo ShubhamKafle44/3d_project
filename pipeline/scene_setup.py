@@ -20,5 +20,12 @@ def build_human_scene(
             scene.set_material_color(part_name, color)
 
     scene.set_camera_orbit(**config.CAMERA)
-    scene.set_lighting(config.LIGHT["intensity"])
+    # Mitsuba exposes the uniform environment intensity as its lighting
+    # parameter; PyTorch3D's shared lighting control scales the key point light.
+    light_intensity = (
+        config.AMBIENT_LIGHT["intensity"]
+        if backend == "mitsuba"
+        else config.LIGHT["intensity"]
+    )
+    scene.set_lighting(light_intensity)
     return scene

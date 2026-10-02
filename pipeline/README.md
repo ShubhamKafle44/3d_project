@@ -23,48 +23,49 @@ assets/human/body.obj   # PLACEHOLDER cube - replace with your real mesh
 
 ## Setup
 
+These commands assume Linux. PyTorch3D must be compiled against the same PyTorch, Python, and CUDA environment used by the pipeline. This repository includes its source in the sibling `pytorch3d/` directory. Install a C++ compiler and, for a CUDA build, the CUDA 11.8 toolkit (`nvcc`) before building. On Debian/Ubuntu, install the compiler with `sudo apt install build-essential`.
+
+From the repository root:
+
 ```bash
-pip install -r requirements.txt
-# PyTorch3D needs a separate, environment-matched install - see requirements.txt
+conda create -n pipeline python=3.10 -y
+conda activate pipeline
+conda install pytorch=2.1.2 torchvision=0.16.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+conda install cuda-toolkit=11.8 -c nvidia -y
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install -r pipeline/requirements.txt
+python3 -m pip install --no-build-isolation -e ./pytorch3d
 ```
 
-1. Put your human `.obj` (and any part meshes: shirt/pants/shoes/etc., or scene
-   background) somewhere under `assets/`.
-2. Edit `config.py`:
-   - `HUMAN_PARTS` -> your mesh path(s)
-   - `BACKGROUND_PATH` -> optional scene geometry
-   - `CAMERA` / `LIGHT` -> starting values (auto-zoom will adjust distance)
+The PyTorch3D build can take several minutes. If you do not have an NVIDIA GPU, install the CPU builds instead of `pytorch-cuda`:
+
+```bash
+conda install pytorch=2.1.2 torchvision=0.16.2 cpuonly -c pytorch -y
+```
+
+Then install the Python dependencies and build PyTorch3D with the same pip commands above. The CPU renderer is slower. Do not use a PyTorch3D wheel built for another Python, PyTorch, or CUDA version. If you replace PyTorch or CUDA later, rebuild PyTorch3D.
+
+To verify the environment and start the pipeline from the repository root:
+
+```bash
+python -c "import torch, torchvision, pytorch3d, mitsuba; print(torch.__version__, torchvision.__version__, pytorch3d.__version__)"
+cd pipeline
+python main.py
+```
+
+The checked-in `main.py` selects its renderer, detector, and search property in code. Edit those settings in `main.py` before launching to change them.
 
 ## Run
 
+From the repository root, activate the environment and launch the pipeline:
+
 ```bash
-# Mitsuba backend, optimize position and orientation together (POSE)
-python main.py --renderer mitsuba --property POSE
-
-# PyTorch3D backend, perturb lighting, RetinaNet detector
-python main.py --renderer pytorch3d --property LIGHTING --model retinanet_resnet50_fpn_v2
-
-# More search budget, larger step size
-python main.py --renderer mitsuba --property ROTATION --epochs 300 --step-size 0.2
+conda activate pipeline
+cd pipeline
+python main.py
 ```
 
-The checked-in `main.py` defaults to `pytorch3d` plus `CLOTHING` with
-`SEARCH["mode"] = "gradient_appearance"`.  That mode differentiates from
-the rendered shirt vertex colors through Faster R-CNN's pre-NMS proposal and
-person-class logits, then saves the best validated render with the same PNG
-output name and format as random search.  Use the Faster R-CNN model for this
-mode; RetinaNet remains available for black-box (`random`) search.
-
-You only ever specify **what to target** (`--property`) and **which
-renderer/detector to test** — mesh loading, camera setup, and the search
-loop are all handled internally from `config.py`.
-
-`--property` options:
-- `POSE` — jointly optimize ground-plane position and yaw while keeping the person upright (default in main.py)
-- `POSITION` — translate the human on the x/z ground plane
-- `ROTATION` — yaw the upright human (pitch and roll stay at zero)
-- `LIGHTING` — scalar light intensity
-- `CLOTHING` — shirt RGB color (requires a `shirt` part in `HUMAN_PARTS`)
+`main.py` currently selects the renderer, detector, and property through variables near the top of the file. Change those values there before launching. For the PyTorch3D `gradient_appearance` mode, select the Faster R-CNN model; RetinaNet is supported for random search.
 
 ## Output
 

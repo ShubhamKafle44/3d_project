@@ -74,3 +74,19 @@ class DifferentiableScene(ABC):
     @abstractmethod
     def render(self) -> Optional[np.ndarray]:
         """Return an (H, W, 3) uint8 RGB numpy array, or None on failure."""
+
+    def render_differentiable(self):
+        """Return a CHW float RGB tensor connected to the backend's AD system.
+
+        Backends may use different tensor libraries (Torch or Dr.Jit). The
+        shared pipeline uses this optional method for gradient-based updates.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not expose differentiable rendering"
+        )
+
+    def differentiable_parameters(self):
+        """Return optimizer-ready (position, scalar-light) leaves if supported."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not expose differentiable parameters"
+        )
