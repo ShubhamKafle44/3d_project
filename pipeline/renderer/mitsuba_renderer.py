@@ -270,7 +270,10 @@ class MitsubaScene(DifferentiableScene):
 
     # ---- position / rotation ----------------------------------------
     def set_position(self, x: float, y: float, z: float) -> None:
-        self.pos = np.array([x, y, z], dtype=np.float32)
+        candidate = np.array([x, y, z], dtype=np.float32)
+        if not self.is_position_valid(candidate):
+            return
+        self.pos = candidate
         if getattr(self, "position_parameter", None) is not None:
             with torch.no_grad():
                 self.position_parameter.copy_(torch.as_tensor(self.pos))
@@ -282,7 +285,9 @@ class MitsubaScene(DifferentiableScene):
         return self.pos.copy()
 
     def is_position_valid(self, position: np.ndarray) -> bool:
-        """Match PyTorch3D's static-scene collision guard for POSITION search."""
+        """Keep the subject in the camera frame and clear of scene geometry."""
+        if not self._is_subject_in_frame(position):
+            return False
         if self._background_face_lower is None or self._subject_lower is None:
             return True
         offset = np.asarray(position, dtype=np.float32)
@@ -292,6 +297,49 @@ class MitsubaScene(DifferentiableScene):
             self._background_face_lower,
             self._background_face_upper,
             config.POSITION_COLLISION_CLEARANCE,
+        )
+
+    def _is_subject_in_frame(self, position: np.ndarray) -> bool:
+        """Project the rotated subject bounds through Mitsuba's perspective camera."""
+        if self._subject_lower is None or self._subject_upper is None:
+            return True
+
+        lower, upper = self._subject_lower, self._subject_upper
+        corners = np.array(
+            [[x, y, z] for x in (lower[0], upper[0])
+             for y in (lower[1], upper[1])
+             for z in (lower[2], upper[2])],
+            dtype=np.float32,
+        )
+        yaw, pitch, roll = np.radians(self.rot_deg)
+        cz, sz = np.cos(yaw), np.sin(yaw)
+        cx, sx = np.cos(pitch), np.sin(pitch)
+        cy, sy = np.cos(roll), np.sin(roll)
+        rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dtype=np.float32)
+        rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]], dtype=np.float32)
+        ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dtype=np.float32)
+        world = corners @ (rz @ rx @ ry).T + np.asarray(position, dtype=np.float32)
+
+        origin = np.asarray(self._camera_origin(), dtype=np.float32)
+        target = np.asarray(self._cam_target, dtype=np.float32)
+        forward = target - origin
+        forward /= np.linalg.norm(forward)
+        right = np.cross(forward, np.array([0, 1, 0], dtype=np.float32))
+        right /= np.linalg.norm(right)
+        up = np.cross(right, forward)
+        relative = world - origin
+        depth = relative @ forward
+        if np.any(depth <= 0):
+            return False
+
+        half_extent = depth * math.tan(math.radians(self._cam_fov) / 2.0)
+        ndc_x = (relative @ right) / half_extent
+        ndc_y = (relative @ up) / half_extent
+        margin = 2.0 * config.POSITION_FRAME_MARGIN_PX / self.image_size
+        limit = 1.0 - margin
+        return bool(
+            np.all(np.abs(ndc_x) <= limit)
+            and np.all(np.abs(ndc_y) <= limit)
         )
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
