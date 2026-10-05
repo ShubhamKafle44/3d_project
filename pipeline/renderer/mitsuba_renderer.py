@@ -20,7 +20,9 @@ import torch as torch
 # Set the variant here so this module works no matter which file imports it first.
 # If something else already chose a variant, leave it alone.
 if mi.variant() is None:
-    mi.set_variant(os.environ.get("MITSUBA_VARIANT", "cuda_ad_rgb"))
+    # llvm_ad_rgb supports Dr.Jit reverse-mode AD on CPU; users with a
+    # compatible NVIDIA setup can opt into cuda_ad_rgb via the environment.
+    mi.set_variant(os.environ.get("MITSUBA_VARIANT", "llvm_ad_rgb"))
 
 
 def linear_to_srgb(x: np.ndarray) -> np.ndarray:
@@ -159,6 +161,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ctx.vertex_keys = vertex_keys
         ctx.light_key = light_key
         ctx.light_rgb = np.asarray(scene.light_color, dtype=np.float32)
+        ctx.rot_deg = scene.rot_deg.copy()
         ctx.save_for_backward(torch_from_numpy(image_np))
         return torch_from_numpy(image_np).permute(2, 0, 1).clamp(0.0, 1.0)
 
@@ -175,6 +178,16 @@ class _MitsubaTorchRender(torch.autograd.Function):
         for key in ctx.vertex_keys:
             vertex_grad = np.array(dr.grad(ctx.params[key]), copy=False).reshape(-1, 3)
             position_grad += vertex_grad.sum(axis=0)
+        # Mesh vertex parameters are local-space values, but the optimized
+        # position translates the rotated object in world space.
+        yaw, pitch, roll = np.radians(ctx.rot_deg)
+        cz, sz = np.cos(yaw), np.sin(yaw)
+        cx, sx = np.cos(pitch), np.sin(pitch)
+        cy, sy = np.cos(roll), np.sin(roll)
+        rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dtype=np.float32)
+        rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]], dtype=np.float32)
+        ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dtype=np.float32)
+        position_grad = (rz @ rx @ ry) @ position_grad
         radiance_grad = np.array(dr.grad(ctx.params[ctx.light_key]), copy=False).reshape(-1, 3)
         radiance_grad = radiance_grad.sum(axis=0)
         scale = 20.0 * ctx.light_rgb
@@ -534,6 +547,11 @@ class MitsubaScene(DifferentiableScene):
         """Render CHW float RGB with a Torch autograd bridge to Dr.Jit."""
         if not self._part_paths:
             raise RuntimeError("load at least one mesh before rendering")
+        if mi.variant() not in ("llvm_ad_rgb", "cuda_ad_rgb"):
+            raise RuntimeError(
+                f"Mitsuba differentiable rendering needs an AD variant, got {mi.variant()!r}. "
+                "Set MITSUBA_VARIANT=llvm_ad_rgb or cuda_ad_rgb before importing Mitsuba."
+            )
 
         if getattr(self, "position_parameter", None) is None:
             self.position_parameter = torch.tensor(
