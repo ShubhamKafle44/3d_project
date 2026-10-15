@@ -54,15 +54,15 @@ DEFAULT_MATERIAL_COLORS = {
 # Adversarial search
 # --------------------------------------------------------------------------
 SEARCH = {
-    "mode": "gradient_appearance",  # "gradient_appearance" (PyTorch3D) or "random"
-    "epochs": 10,
+    "mode": "gradient_appearance",  # "gradient_appearance" or "random"
+    "epochs": 100,
     "step_size": 2.0,
     "pose_position_step": 0.1,
     "pose_rotation_step_deg": 10.0,
     "success_threshold": 0.05,      # stop once human_prob <= this
     "gradient_learning_rate": 0.06,
     "gradient_validate_every": 5,
-    "gradient_image_size": 512,
+    "gradient_image_size": 2048,
     "gradient_detector_size": 384,
     "gradient_person_loss_weight": 1.0,
     "gradient_rpn_loss_weight": 0.25,

@@ -149,7 +149,7 @@ def run_adversarial_search(
 
     if verbose:
         print(f"Initial human_prob = {best_prob * 100:.2f}%")
-        print(f"{'Step':>4} {'HumanProb':>10} {'Persons':>8}  {'TopLabel':<10} Parameters")
+        print(f"{'Step':>4} {'HumanProb':>10}  {'TopLabel':<10} Parameters")
         print("-" * 70)
 
     # There is nothing to optimize when the initial render already meets the
@@ -195,7 +195,7 @@ def run_adversarial_search(
             _set_property(scene, property_name, current_value)  # revert
 
         if verbose:
-            print(f"{step:4d} {human_prob * 100:9.2f}% {result['num_persons']:8d}  "
+            print(f"{step:4d} {human_prob * 100:9.2f}%  "
                   f"{result['top_label']:<10} {_format_property(property_name, proposal)}")
 
         if best_prob <= success_threshold:

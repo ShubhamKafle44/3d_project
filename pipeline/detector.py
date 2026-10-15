@@ -63,7 +63,6 @@ class HumanDetectionClassifier:
 
         return {
             "human_prob": human_prob,
-            "num_persons": int(person_mask.sum().item()),
             "top_label": top_label,
             "all_scores": person_scores.cpu().tolist(),
         }

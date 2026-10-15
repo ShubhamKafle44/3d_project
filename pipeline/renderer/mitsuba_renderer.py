@@ -22,17 +22,21 @@ import torch as torch
 if mi.variant() is None:
     # llvm_ad_rgb supports Dr.Jit reverse-mode AD on CPU; users with a
     # compatible NVIDIA setup can opt into cuda_ad_rgb via the environment.
-    mi.set_variant(os.environ.get("MITSUBA_VARIANT", "llvm_ad_rgb"))
+    mi.set_variant(os.environ.get("MITSUBA_VARIANT", "cuda_ad_rgb"))
 
 
-def linear_to_srgb(x: np.ndarray) -> np.ndarray:
+def linear_to_srgb(x):
+    """Convert linear RGB to sRGB for either NumPy arrays or Torch tensors."""
+    if isinstance(x, torch.Tensor):
+        x = x.clamp(0.0, 1.0)
+        return torch.where(
+            x <= 0.0031308,
+            12.92 * x,
+            1.055 * x.clamp_min(0.0031308) ** (1.0 / 2.4) - 0.055,
+        )
+
     x = np.clip(x, 0.0, 1.0)
     return np.where(x <= 0.0031308, 12.92 * x, 1.055 * np.power(x, 1.0 / 2.4) - 0.055)
-
-
-def linear_to_srgb_torch(x: torch.Tensor) -> torch.Tensor:
-    x = x.clamp(0.0, 1.0)
-    return torch.where(x <= 0.0031308, 12.92 * x, 1.055 * x.clamp_min(0.0031308) ** (1.0 / 2.4) - 0.055)
 
 
 def _srgb_output() -> bool:
@@ -564,7 +568,7 @@ class MitsubaScene(DifferentiableScene):
         image = _MitsubaTorchRender.apply(
             self, self.position_parameter, self.lighting_parameter
         )
-        return linear_to_srgb_torch(image) if _srgb_output() else image
+        return linear_to_srgb(image) if _srgb_output() else image
 
     def differentiable_parameters(self):
         """Return optimizer-ready Torch leaves for position and light intensity."""
