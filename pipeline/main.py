@@ -1,5 +1,6 @@
 
 import os
+import argparse
 import torch
 
 import config
@@ -9,6 +10,16 @@ from search import run_3d_appearance_attack, run_adversarial_search, save_image
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run the 3D human detection search")
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=config.SEARCH["epochs"],
+        help=f"Maximum number of search epochs (default: {config.SEARCH['epochs']})",
+    )
+    args = parser.parse_args()
+    if args.epochs < 1:
+        parser.error("--epochs must be a positive integer")
 
     # =========================
     # SETTINGS
@@ -24,7 +35,7 @@ def main():
     model = "retinanet_resnet50_fpn_v2"
     # Other value: "retinanet_resnet50_fpn_v2", "fasterrcnn_resnet50_fpn_v2"
 
-    epochs = config.SEARCH["epochs"]
+    epochs = args.epochs
 
     step_size = config.SEARCH["step_size"]
     # Example: 0.01

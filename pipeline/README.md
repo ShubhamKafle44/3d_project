@@ -67,6 +67,14 @@ python main.py
 
 `main.py` currently selects the renderer, detector, and property through variables near the top of the file. Change those values there before launching. For the PyTorch3D `gradient_appearance` mode, select the Faster R-CNN model; RetinaNet is supported for random search.
 
+To launch a 10,000-epoch search from inside `pipeline/` and keep it running after the terminal closes:
+
+```bash
+bash run_background.sh
+```
+
+The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument if needed. `--epochs` also works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
+
 ## Output
 
 - `outputs/initial_render.png` — the starting render

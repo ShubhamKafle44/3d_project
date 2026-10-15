@@ -136,6 +136,14 @@ def run_adversarial_search(
         initial_yaw = float(scene.get_rotation_deg()[0])
         scene.set_rotation_deg(initial_yaw, 0.0, 0.0)
 
+    if property_name in ("POSITION", "POSE"):
+        initial_position = scene.get_position()
+        if not scene.is_position_valid(initial_position):
+            raise RuntimeError(
+                "The initial human position is outside the camera frame or "
+                "intersects scene geometry; refusing to start the search."
+            )
+
     initial_img = scene.render()
     if initial_img is None:
         raise RuntimeError("Initial render returned None - check mesh paths in config.py")
@@ -180,6 +188,19 @@ def run_adversarial_search(
                       f"{_format_property(property_name, proposal)}")
             continue
         _set_property(scene, property_name, proposal)
+
+        if property_name in ("POSITION", "POSE"):
+            requested_position = proposal if property_name == "POSITION" else proposal[0]
+            applied_position = scene.get_position()
+            if (
+                not np.allclose(applied_position, requested_position, atol=1e-5)
+                or not scene.is_position_valid(applied_position)
+            ):
+                _set_property(scene, property_name, current_value)
+                if verbose:
+                    print(f"{step:4d} {'rejected':>10} {'frame check':>12}  "
+                          f"{_format_property(property_name, proposal)}")
+                continue
 
         img = scene.render()
         if img is None:
