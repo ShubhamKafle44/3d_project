@@ -226,5 +226,5 @@ def render_scene(obj_path, output_image_path="render.png"):
     print(f"Successfully rendered to {output_image_path}")
 
 if __name__ == "__main__":
-    OBJ_FILE = PIPELINE_DIR / "assets/studio/environment.obj"
+    OBJ_FILE = PIPELINE_DIR / "assets/3D_ENVIRONMENTS/studio/environment.obj"
     render_scene(OBJ_FILE)

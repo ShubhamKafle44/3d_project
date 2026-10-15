@@ -18,7 +18,8 @@ renderer/
   base.py                # DifferentiableScene interface both backends implement
   pytorch3d_renderer.py   # PyTorch3D backend
   mitsuba_renderer.py     # Mitsuba 3 / Dr.Jit backend
-assets/human/body.obj   # PLACEHOLDER cube - replace with your real mesh
+assets/3D_MODELS/human/ # default multipart human model
+assets/3D_ENVIRONMENTS/studio/ # default studio environment
 ```
 
 ## Setup
@@ -67,13 +68,40 @@ python main.py
 
 `main.py` currently selects the renderer, detector, and property through variables near the top of the file. Change those values there before launching. For the PyTorch3D `gradient_appearance` mode, select the Faster R-CNN model; RetinaNet is supported for random search.
 
+### Choose a 3D model and environment
+
+Put each model in `assets/3D_MODELS/` and each environment in
+`assets/3D_ENVIRONMENTS/`. OBJ files can be passed directly. A model folder may
+contain one OBJ or several OBJ parts that should be loaded together; an
+environment folder should contain one OBJ (or a file named `environment.obj`).
+Keep each OBJ's MTL and texture files alongside it so its relative texture
+references continue to work. The pipeline currently accepts OBJ assets.
+
+List top-level asset names:
+
+```bash
+python main.py --list-assets
+```
+
+Select assets by folder or filename, and use `none` for a plain background:
+
+```bash
+python main.py --model "delivery van" --environment "warehouse" --epochs 100
+python main.py --model "delivery van/van.obj" --environment none --epochs 100
+```
+
+The built-in `human` model and `studio` environment remain the defaults.
+Custom models are automatically framed from their OBJ bounds. Each run saves
+its initial render and result with the selected model/environment names in the
+filename, so experimenting with another pair does not overwrite those images.
+
 To launch a 10,000-epoch search from inside `pipeline/` and keep it running after the terminal closes:
 
 ```bash
 bash run_background.sh
 ```
 
-The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument if needed. `--epochs` also works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
+The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument, followed by any `main.py` options. For example: `bash run_background.sh 100 --model "delivery van" --environment warehouse`. `--epochs` also works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
 
 ## Output
 
@@ -92,8 +120,8 @@ The script writes a timestamped log and PID file under `pipeline/outputs/`, then
   notes at the bottom of `pytorch3d_renderer.py` and
   `mitsuba_renderer.py` for how to expose per-parameter gradients through
   each backend's own AD system (`torch.autograd` / Dr.Jit AD).
-- `assets/human/body.obj` in this repo is a placeholder cube used only to
-  verify the pipeline runs end-to-end — swap in your real human mesh.
+- The default multipart model is in `assets/3D_MODELS/human/`; replace or add
+  assets in the model and environment libraries to try other scenes.
 - The Mitsuba backend defaults to CPU (`scalar_rgb` variant); switch to
   `cuda_ad_rgb` (set `MITSUBA_VARIANT` env var) if you have a GPU and want
   it to run faster or want AD.

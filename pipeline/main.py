@@ -1,10 +1,12 @@
 
 import os
 import argparse
+import re
+from pathlib import Path
 import torch
 
 import config
-from scene_setup import build_human_scene
+from scene_setup import available_assets, build_human_scene
 from detector import HumanDetectionClassifier
 from search import run_3d_appearance_attack, run_adversarial_search, save_image
 
@@ -17,7 +19,27 @@ def main():
         default=config.SEARCH["epochs"],
         help=f"Maximum number of search epochs (default: {config.SEARCH['epochs']})",
     )
+    parser.add_argument(
+        "--model",
+        default="human",
+        help="OBJ file or model folder under assets/3D_MODELS (default: human)",
+    )
+    parser.add_argument(
+        "--environment",
+        default="studio",
+        help="Environment OBJ or folder under assets/3D_ENVIRONMENTS; use 'none' for no environment",
+    )
+    parser.add_argument(
+        "--list-assets",
+        action="store_true",
+        help="List available model and environment names, then exit",
+    )
     args = parser.parse_args()
+    if args.list_assets:
+        models, environments = available_assets()
+        print("Models      : " + (", ".join(models) or "(none found)"))
+        print("Environments: " + (", ".join(environments) or "(none found)"))
+        return
     if args.epochs < 1:
         parser.error("--epochs must be a positive integer")
 
@@ -50,10 +72,18 @@ def main():
 
     os.makedirs(out_dir, exist_ok=True)
 
+    def safe_name(value):
+        label = Path(value).stem if Path(value).suffix.lower() == ".obj" else Path(value).name
+        return re.sub(r"[^A-Za-z0-9_-]+", "_", label).strip("_") or "asset"
+
+    run_name = f"{safe_name(args.model)}_{safe_name(args.environment)}"
+
     print("=" * 60)
     print("Adversarial Search")
     print(f"Renderer : {renderer}")
     print(f"Detector : {model}")
+    print(f"3D model : {args.model}")
+    print(f"Environment: {args.environment}")
     gradient_mode = (
         renderer == "pytorch3d"
         and config.SEARCH["mode"] == "gradient_appearance"
@@ -79,6 +109,8 @@ def main():
         renderer,
         device=device,
         image_size=scene_image_size,
+        model=args.model,
+        environment=args.environment,
     )
 
     classifier = HumanDetectionClassifier(
@@ -99,7 +131,7 @@ def main():
 
     save_image(
         initial_img,
-        f"{out_dir}/initial_render.png"
+        f"{out_dir}/{run_name}_initial_render.png"
     )
 
     # =========================
@@ -131,7 +163,7 @@ def main():
     # =========================
 
     output_path = (
-        f"{out_dir}/adversarial_result_"
+        f"{out_dir}/adversarial_result_{run_name}_"
         f"{renderer}_{property.lower()}.png"
     )
 

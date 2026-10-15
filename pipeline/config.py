@@ -1,13 +1,13 @@
 
 HUMAN_PARTS = {
-    "body": "assets/human/body.obj",
-    "shirt": "assets/human/shirt.obj",
-    "pants": "assets/human/pants.obj",
-    "shoes_and_eyelash": "assets/human/shoes_and_eyelash.obj",
+    "body": "assets/3D_MODELS/human/body.obj",
+    "shirt": "assets/3D_MODELS/human/shirt.obj",
+    "pants": "assets/3D_MODELS/human/pants.obj",
+    "shoes_and_eyelash": "assets/3D_MODELS/human/shoes_and_eyelash.obj",
 }
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
-BACKGROUND_PATH = "assets/studio/environment.obj"
+BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 
 # --------------------------------------------------------------------------
 # Rendering
