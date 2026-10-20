@@ -1,6 +1,5 @@
 from pathlib import Path
 import math
-import os
 from tempfile import TemporaryDirectory
 from contextlib import ExitStack
 import sys
@@ -15,7 +14,7 @@ if str(PIPELINE_DIR) not in sys.path:
 
 import config
 
-mi.set_variant(os.environ.get("MITSUBA_VARIANT", "cuda_ad_rgb"))
+mi.set_variant(config.MITSUBA_VARIANT)
 
 CAMERA = config.CAMERA
 

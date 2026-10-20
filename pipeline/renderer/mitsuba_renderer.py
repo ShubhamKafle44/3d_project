@@ -5,7 +5,6 @@ from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, Optional, Tuple
-import os
 
 import numpy as np
 from PIL import Image
@@ -17,12 +16,9 @@ import mitsuba as mi
 import drjit as dr
 import torch as torch
 
-# Set the variant here so this module works no matter which file imports it first.
-# If something else already chose a variant, leave it alone.
+
 if mi.variant() is None:
-    # llvm_ad_rgb supports Dr.Jit reverse-mode AD on CPU; users with a
-    # compatible NVIDIA setup can opt into cuda_ad_rgb via the environment.
-    mi.set_variant(os.environ.get("MITSUBA_VARIANT", "cuda_ad_rgb"))
+    mi.set_variant(config.MITSUBA_VARIANT)
 
 
 def linear_to_srgb(x):
@@ -133,16 +129,17 @@ class _MitsubaTorchRender(torch.autograd.Function):
     """Bridge Torch cotangents to the Dr.Jit graph retained by mi.render."""
 
     @staticmethod
-    def forward(ctx, scene: "MitsubaScene", position, lighting):
+    def forward(ctx, scene: "MitsubaScene", position, rotation, lighting, shirt_color):
         pos = position.detach().cpu().numpy().astype(np.float32)
+        rot_deg = rotation.detach().cpu().numpy().astype(np.float32)
         intensity = float(lighting.detach().cpu())
         scene_dict = scene._build_scene_dict(differentiable=True)
         transform = (
             mi.ScalarTransform4f()
             .translate(pos.tolist())
-            .rotate([0, 0, 1], scene.rot_deg[0])
-            .rotate([1, 0, 0], scene.rot_deg[1])
-            .rotate([0, 1, 0], scene.rot_deg[2])
+            .rotate([0, 0, 1], float(rot_deg[0]))
+            .rotate([1, 0, 0], float(rot_deg[1]))
+            .rotate([0, 1, 0], float(rot_deg[2]))
         )
         part_keys = scene._part_shape_keys()
         for key in part_keys:
@@ -150,13 +147,45 @@ class _MitsubaTorchRender(torch.autograd.Function):
         scene_dict["street_light"]["intensity"]["value"] = [
             20.0 * intensity * float(channel) for channel in scene.light_color
         ]
+        if shirt_color is not None:
+            color = shirt_color.detach().cpu().numpy().astype(np.float32).tolist()
+            for key, _, _ in scene._part_shapes.get("shirt", []):
+                # The attack uses a uniform differentiable diffuse color for
+                # the shirt while preserving the shape and lighting graph.
+                scene_dict[key]["bsdf"] = {
+                    "type": "diffuse",
+                    "reflectance": {"type": "rgb", "value": color},
+                }
         mitsuba_scene = mi.load_dict(scene_dict)
         params = mi.traverse(mitsuba_scene)
-        vertex_keys = [f"{key}.vertex_positions" for key in part_keys]
+        # Mitsuba does not expose vertex_positions for every OBJ shape
+        # (for example, some degenerate or specially loaded meshes). Only
+        # enable gradients for parameters present in this scene traversal.
+        requested_vertex_keys = [f"{key}.vertex_positions" for key in part_keys]
+        vertex_keys = [key for key in requested_vertex_keys if key in params]
+        if not vertex_keys:
+            raise RuntimeError(
+                "Mitsuba did not expose vertex_positions for any subject mesh; "
+                "cannot differentiate scene position."
+            )
         for key in vertex_keys:
             dr.enable_grad(params[key])
         light_key = "street_light.intensity.value"
         dr.enable_grad(params[light_key])
+        shirt_keys = []
+        if shirt_color is not None:
+            shirt_keys = [
+                f"{key}.bsdf.reflectance.value"
+                for key, _, _ in scene._part_shapes.get("shirt", [])
+                if f"{key}.bsdf.reflectance.value" in params
+            ]
+            if not shirt_keys:
+                raise RuntimeError(
+                    "Mitsuba did not expose a shirt reflectance parameter; "
+                    "cannot differentiate clothing color."
+                )
+            for key in shirt_keys:
+                dr.enable_grad(params[key])
         params.update()
         image = mi.render(mitsuba_scene, params=params, spp=scene._spp)
         image_np = np.array(image, copy=True)
@@ -165,7 +194,9 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ctx.vertex_keys = vertex_keys
         ctx.light_key = light_key
         ctx.light_rgb = np.asarray(scene.light_color, dtype=np.float32)
-        ctx.rot_deg = scene.rot_deg.copy()
+        ctx.shirt_keys = shirt_keys
+        ctx.has_shirt_color = shirt_color is not None
+        ctx.rot_deg = rot_deg
         ctx.save_for_backward(torch_from_numpy(image_np))
         return torch_from_numpy(image_np).permute(2, 0, 1).clamp(0.0, 1.0)
 
@@ -196,8 +227,41 @@ class _MitsubaTorchRender(torch.autograd.Function):
         radiance_grad = radiance_grad.sum(axis=0)
         scale = 20.0 * ctx.light_rgb
         lighting_grad = float(np.dot(radiance_grad, scale))
-        return None, torch_from_numpy(position_grad).to(grad_output.device), torch.tensor(
-            lighting_grad, dtype=grad_output.dtype, device=grad_output.device
+        shirt_grad = np.zeros(3, dtype=np.float32)
+        for key in ctx.shirt_keys:
+            shirt_grad += np.array(dr.grad(ctx.params[key]), copy=False).reshape(-1, 3).sum(axis=0)
+        # The vertex-position cotangents also provide derivatives for the
+        # Euler angles used by the static Mitsuba object transform.
+        rotation_grad = np.zeros(3, dtype=np.float32)
+        for key in ctx.vertex_keys:
+            local_vertices = np.array(ctx.params[key], copy=False).reshape(-1, 3)
+            local_grad = np.array(dr.grad(ctx.params[key]), copy=False).reshape(-1, 3)
+            yaw, pitch, roll = np.radians(ctx.rot_deg)
+            cz, sz = np.cos(yaw), np.sin(yaw)
+            cx, sx = np.cos(pitch), np.sin(pitch)
+            cy, sy = np.cos(roll), np.sin(roll)
+            rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dtype=np.float32)
+            rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]], dtype=np.float32)
+            ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dtype=np.float32)
+            drz = np.array([[-sz, -cz, 0], [cz, -sz, 0], [0, 0, 0]], dtype=np.float32)
+            drx = np.array([[0, 0, 0], [0, -sx, -cx], [0, cx, -sx]], dtype=np.float32)
+            dry = np.array([[-sy, 0, cy], [0, 0, 0], [-cy, 0, -sy]], dtype=np.float32)
+            derivatives = (drz @ rx @ ry, rz @ drx @ ry, rz @ rx @ dry)
+            rotation_matrix = rz @ rx @ ry
+            for index, derivative in enumerate(derivatives):
+                local_delta = local_vertices @ (rotation_matrix.T @ derivative).T
+                rotation_grad[index] += np.sum(local_grad * local_delta) * (np.pi / 180.0)
+
+        return (
+            None,
+            torch_from_numpy(position_grad).to(grad_output.device),
+            torch_from_numpy(rotation_grad).to(grad_output.device),
+            torch.tensor(lighting_grad, dtype=grad_output.dtype, device=grad_output.device),
+            (
+                torch_from_numpy(shirt_grad).to(grad_output.device)
+                if ctx.has_shirt_color
+                else None
+            ),
         )
 
 
@@ -220,6 +284,12 @@ class MitsubaScene(DifferentiableScene):
 
         self.pos = np.zeros(3, dtype=np.float32)
         self.rot_deg = np.zeros(3, dtype=np.float32)  # yaw, pitch, roll
+        self.position_parameter = None
+        self.rotation_parameter = None
+        self.lighting_parameter = None
+        self.shirt_color_parameter = None
+        self._shirt_color_override = None
+        self._active_differentiable_property = None
         self.ambient_intensity = 1.0
         self.light_color = config.LIGHT.get("color", (1.0, 1.0, 1.0))
 
@@ -303,6 +373,8 @@ class MitsubaScene(DifferentiableScene):
 
     def is_position_valid(self, position: np.ndarray) -> bool:
         """Keep the subject in the camera frame and clear of scene geometry."""
+        if self.rotation_parameter is not None:
+            self.rot_deg = self.rotation_parameter.detach().cpu().numpy().astype(np.float32)
         if not self._is_subject_in_frame(position):
             return False
         if self._background_face_lower is None or self._subject_lower is None:
@@ -361,8 +433,14 @@ class MitsubaScene(DifferentiableScene):
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
         self.rot_deg = np.array([yaw, pitch, roll], dtype=np.float32)
+        if self.rotation_parameter is not None:
+            with torch.no_grad():
+                self.rotation_parameter.copy_(torch.as_tensor(self.rot_deg))
+            self.rotation_parameter.grad = None
 
     def get_rotation_deg(self) -> np.ndarray:
+        if self.rotation_parameter is not None:
+            return self.rotation_parameter.detach().cpu().numpy().copy()
         return self.rot_deg.copy()
 
     # ---- lighting -----------------------------------------------------
@@ -381,8 +459,16 @@ class MitsubaScene(DifferentiableScene):
     # ---- material -------------------------------------------------------
     def set_material_color(self, part_name: str, rgb: Tuple[float, float, float]) -> None:
         self._part_colors[part_name] = tuple(float(c) for c in rgb)
+        if part_name == "shirt" and self.shirt_color_parameter is not None:
+            with torch.no_grad():
+                self.shirt_color_parameter.copy_(torch.as_tensor(rgb))
+            self.shirt_color_parameter.grad = None
+            if self._active_differentiable_property == "CLOTHING":
+                self._shirt_color_override = tuple(float(c) for c in rgb)
 
     def get_material_color(self, part_name: str) -> np.ndarray:
+        if part_name == "shirt" and self.shirt_color_parameter is not None:
+            return self.shirt_color_parameter.detach().cpu().numpy().copy()
         return np.array(self._part_colors.get(part_name, (0.8, 0.8, 0.8)))
 
     # ---- camera ----------------------------------------------------------
@@ -506,6 +592,14 @@ class MitsubaScene(DifferentiableScene):
         for name, shapes in self._part_shapes.items():
             r, g, b = self._part_colors.get(name, (0.8, 0.8, 0.8))
             for key, mesh_path, bsdf in shapes:
+                if name == "shirt" and self._shirt_color_override is not None:
+                    bsdf = {
+                        "type": "diffuse",
+                        "reflectance": {
+                            "type": "rgb",
+                            "value": list(self._shirt_color_override),
+                        },
+                    }
                 scene_dict[key] = {
                     "type": "obj",
                     "filename": mesh_path,
@@ -535,7 +629,12 @@ class MitsubaScene(DifferentiableScene):
         try:
             if getattr(self, "position_parameter", None) is not None:
                 self.pos = self.position_parameter.detach().cpu().numpy().astype(np.float32)
+                self.rot_deg = self.rotation_parameter.detach().cpu().numpy().astype(np.float32)
                 self.ambient_intensity = float(self.lighting_parameter.detach().cpu())
+                if self._active_differentiable_property == "CLOTHING":
+                    self._shirt_color_override = tuple(
+                        self.shirt_color_parameter.detach().cpu().numpy().tolist()
+                    )
             scene_dict = self._build_scene_dict()
             scene = mi.load_dict(scene_dict)
             image = mi.render(scene, spp=self._spp)
@@ -554,7 +653,7 @@ class MitsubaScene(DifferentiableScene):
         if mi.variant() not in ("llvm_ad_rgb", "cuda_ad_rgb"):
             raise RuntimeError(
                 f"Mitsuba differentiable rendering needs an AD variant, got {mi.variant()!r}. "
-                "Set MITSUBA_VARIANT=llvm_ad_rgb or cuda_ad_rgb before importing Mitsuba."
+                "Set config.MITSUBA_VARIANT to 'llvm_ad_rgb' or 'cuda_ad_rgb' before importing Mitsuba."
             )
 
         if getattr(self, "position_parameter", None) is None:
@@ -565,8 +664,27 @@ class MitsubaScene(DifferentiableScene):
             self.lighting_parameter = torch.tensor(
                 self.ambient_intensity, dtype=torch.float32, requires_grad=True
             )
+        if getattr(self, "rotation_parameter", None) is None:
+            self.rotation_parameter = torch.tensor(
+                self.rot_deg.copy(), dtype=torch.float32, requires_grad=True
+            )
+        if getattr(self, "shirt_color_parameter", None) is None:
+            self.shirt_color_parameter = torch.tensor(
+                self.get_material_color("shirt").astype(np.float32),
+                dtype=torch.float32,
+                requires_grad=True,
+            )
+        shirt_color = None
+        if self._active_differentiable_property == "CLOTHING":
+            if not self._part_shapes.get("shirt"):
+                raise ValueError("CLOTHING optimization requires a model part named 'shirt'")
+            shirt_color = self.shirt_color_parameter
+            self._shirt_color_override = tuple(
+                shirt_color.detach().cpu().numpy().tolist()
+            )
         image = _MitsubaTorchRender.apply(
-            self, self.position_parameter, self.lighting_parameter
+            self, self.position_parameter, self.rotation_parameter,
+            self.lighting_parameter, shirt_color,
         )
         return linear_to_srgb(image) if _srgb_output() else image
 
@@ -576,8 +694,23 @@ class MitsubaScene(DifferentiableScene):
             self.position_parameter = torch.tensor(
                 self.pos.copy(), dtype=torch.float32, requires_grad=True
             )
+        if getattr(self, "rotation_parameter", None) is None:
+            self.rotation_parameter = torch.tensor(
+                self.rot_deg.copy(), dtype=torch.float32, requires_grad=True
+            )
         if getattr(self, "lighting_parameter", None) is None:
             self.lighting_parameter = torch.tensor(
                 self.ambient_intensity, dtype=torch.float32, requires_grad=True
             )
-        return self.position_parameter, self.lighting_parameter
+        if getattr(self, "shirt_color_parameter", None) is None:
+            self.shirt_color_parameter = torch.tensor(
+                self.get_material_color("shirt").astype(np.float32),
+                dtype=torch.float32,
+                requires_grad=True,
+            )
+        return (
+            self.position_parameter,
+            self.rotation_parameter,
+            self.lighting_parameter,
+            self.shirt_color_parameter,
+        )

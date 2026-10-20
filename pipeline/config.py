@@ -9,13 +9,15 @@ HUMAN_PARTS = {
 # Optional background/scene geometry (room, floor, props). None = plain background.
 BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 
+
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
-PYTORCH3D_IMAGE_SIZE = 512
-MITSUBA_IMAGE_SIZE = 2048
-MITSUBA_SPP = 20
+MITSUBA_SPP = 4
+
+# Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
+MITSUBA_VARIANT = "cuda_ad_rgb"
 
 CAMERA = {
     "distance": 8.5,
@@ -54,15 +56,11 @@ DEFAULT_MATERIAL_COLORS = {
 # Adversarial search
 # --------------------------------------------------------------------------
 SEARCH = {
-    "mode": "gradient_appearance",  # "gradient_appearance" or "random"
-    "epochs": 100,
-    "step_size": 2.0,
-    "pose_position_step": 0.1,
-    "pose_rotation_step_deg": 10.0,
-    "success_threshold": 0.05,      # stop once human_prob <= this
+    "epochs": 10000,
+    "success_threshold": 0.05,      
     "gradient_learning_rate": 0.06,
     "gradient_validate_every": 5,
-    "gradient_image_size": 2048,
+    "gradient_image_size": 512,
     "gradient_detector_size": 384,
     "gradient_person_loss_weight": 1.0,
     "gradient_rpn_loss_weight": 0.25,
