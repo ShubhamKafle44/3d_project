@@ -1,121 +1,111 @@
-
 import os
-import argparse
 import re
+import sys
 from pathlib import Path
+
 import torch
 
 import config
-from scene_setup import available_assets, build_human_scene
-from detector import HumanDetectionClassifier
-from search import run_3d_appearance_attack, run_adversarial_search, save_image
+from detector import ObjectDetectionClassifier
+from scene_setup import  build_scene_layout
+from search import (
+    PROPERTIES,
+    run_gradient_descent,
+    save_image,
+)
+
+
+def _safe_name(value):
+    path = Path(value)
+    label = path.stem if path.suffix.lower() == ".obj" else path.name
+    return re.sub(r"[^A-Za-z0-9_-]+", "_", label).strip("_") or "asset"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run the 3D human detection search")
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=config.SEARCH["epochs"],
-        help=f"Maximum number of search epochs (default: {config.SEARCH['epochs']})",
-    )
-    parser.add_argument(
-        "--model",
-        default="human",
-        help="OBJ file or model folder under assets/3D_MODELS (default: human)",
-    )
-    parser.add_argument(
-        "--environment",
-        default="studio",
-        help="Environment OBJ or folder under assets/3D_ENVIRONMENTS; use 'none' for no environment",
-    )
-    parser.add_argument(
-        "--list-assets",
-        action="store_true",
-        help="List available model and environment names, then exit",
-    )
-    args = parser.parse_args()
-    if args.list_assets:
-        models, environments = available_assets()
-        print("Models      : " + (", ".join(models) or "(none found)"))
-        print("Environments: " + (", ".join(environments) or "(none found)"))
-        return
-    if args.epochs < 1:
-        parser.error("--epochs must be a positive integer")
+    epochs = config.SEARCH["epochs"]
+
+    # Allow long runs to be started with an epoch override.
+    if len(sys.argv) > 1:
+        i = 1
+        while i < len(sys.argv):
+            if sys.argv[i] == "--epochs" and i + 1 < len(sys.argv):
+                try:
+                    epochs = int(sys.argv[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+            else:
+                i += 1
 
     # =========================
     # SETTINGS
     # =========================
 
-    renderer = "mitsuba"  # Other value: "mitsuba"
-    # Other value: "pytorch3d", "mitsuba"
+    # "pytorch3d" or "mitsuba"
+    renderer = "mitsuba"
 
-    # Jointly optimize ground-plane position and yaw, pitch, and roll.
+    # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING"
     property = "POSITION"
-    # Other targets: "POSITION", "POSE", "LIGHTING", "CLOTHING"
 
-    model = "retinanet_resnet50_fpn_v2"
-    # Other value: "retinanet_resnet50_fpn_v2", "fasterrcnn_resnet50_fpn_v2"
+    #DEFINE MODELS
+    model = "human"
+    environment = "studio"
 
-    epochs = args.epochs
 
-    step_size = config.SEARCH["step_size"]
-    # Example: 0.01
-
+    detector_name = "fasterrcnn_resnet50_fpn_v2"
+    detector_target = "person"
     success_threshold = config.SEARCH["success_threshold"]
-    # Example: 0.5
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
-  
+    scene_image_size = config.SEARCH["gradient_image_size"]
+
+
+
+    if renderer not in {"pytorch3d", "mitsuba"}:
+        raise ValueError("renderer must be 'pytorch3d' or 'mitsuba'")
+    if property not in PROPERTIES:
+        raise ValueError(f"property must be one of {PROPERTIES}, got {property!r}")
+
+    if epochs < 1:
+        raise ValueError("epochs must be a positive integer")
+
+
 
     out_dir = "outputs"
-
     os.makedirs(out_dir, exist_ok=True)
+    # NAME OF THE IMAGE
+    run_name = f"{_safe_name(model)}_{_safe_name(environment)}" 
 
-    def safe_name(value):
-        label = Path(value).stem if Path(value).suffix.lower() == ".obj" else Path(value).name
-        return re.sub(r"[^A-Za-z0-9_-]+", "_", label).strip("_") or "asset"
 
-    run_name = f"{safe_name(args.model)}_{safe_name(args.environment)}"
 
+    # OUTPUT FORMAT
     print("=" * 60)
     print("Adversarial Search")
     print(f"Renderer : {renderer}")
-    print(f"Detector : {model}")
-    print(f"3D model : {args.model}")
-    print(f"Environment: {args.environment}")
-    gradient_mode = (
-        renderer == "pytorch3d"
-        and config.SEARCH["mode"] == "gradient_appearance"
-        and property == "CLOTHING"
-    )
-    if gradient_mode and not model.startswith("fasterrcnn_"):
-        raise ValueError(
-            "gradient_appearance currently requires a Faster R-CNN detector; "
-            "use fasterrcnn_resnet50_fpn_v2 or set SEARCH['mode'] to 'random'."
-        )
-    attack_label = "3D shirt appearance" if gradient_mode else property
-    print(f"Property : {attack_label}")
+    print(f"Detector : {detector_name}")
+    print(f"3D model : {model}")
+    print(f"Environment: {environment}")
+    print(f"Property : {property}")
+    print("Search mode: gradient")
     print(f"Device   : {device}")
     print("=" * 60)
 
-    scene_image_size = (
-        config.SEARCH["gradient_image_size"] if gradient_mode
-        else config.MITSUBA_IMAGE_SIZE if renderer == "mitsuba"
-        else config.PYTORCH3D_IMAGE_SIZE if renderer == "pytorch3d"
-        else None
-    )
-    scene = build_human_scene(
+
+
+   #BUILD THE SCENE WITH 3d MODEL AND THE ENVIRONMENT
+    scene = build_scene_layout(
         renderer,
         device=device,
         image_size=scene_image_size,
-        model=args.model,
-        environment=args.environment,
+        model=model,
+        environment=environment,
     )
 
-    classifier = HumanDetectionClassifier(
-        model_name=model,
-        device=device
+
+    #DEFINE THE CLASSIFIER
+    classifier = ObjectDetectionClassifier(
+        model_name= detector_name,
+        target_class=detector_target,
+        device=device,
     )
 
 
@@ -129,34 +119,29 @@ def main():
         print("ERROR: Initial render failed.")
         return
 
-    save_image(
-        initial_img,
-        f"{out_dir}/{run_name}_initial_render.png"
-    )
+    save_image(initial_img, f"{out_dir}/{run_name}_initial_render.png")
+
+
+
+
+
 
     # =========================
     # ADVERSARIAL SEARCH
     # =========================
 
-    if gradient_mode:
-        result = run_3d_appearance_attack(
-            scene,
-            classifier,
-            epochs=epochs,
-            learning_rate=config.SEARCH["gradient_learning_rate"],
-            validate_every=config.SEARCH["gradient_validate_every"],
-            detector_input_size=config.SEARCH["gradient_detector_size"],
-            success_threshold=success_threshold,
-        )
-    else:
-        result = run_adversarial_search(
-            scene,
-            classifier,
-            property,
-            epochs=epochs,
-            step_size=step_size,
-            success_threshold=success_threshold,
-        )
+    result = run_gradient_descent(
+        scene,
+        classifier,
+        property,
+        epochs=epochs,
+        learning_rate=config.SEARCH["gradient_learning_rate"],
+        validate_every=config.SEARCH["gradient_validate_every"], # THIS BUILDS THE IMAGE AFTER EVERY [gradient_validate_every] value.
+        detector_input_size=config.SEARCH["gradient_detector_size"],
+        success_threshold=success_threshold,
+    )
+
+
 
     # =========================
     # SAVE RESULT
@@ -172,7 +157,7 @@ def main():
     print("\nRESULT")
     print(f"Success           : {result.success}")
     print(f"Best step         : {result.best_step}")
-    print(f"Human probability : {result.best_prob * 100:.2f}%")
+    print(f"{classifier.target_name} probability : {result.best_prob * 100:.2f}%")
     print(f"Saved              : {output_path}")
 
 

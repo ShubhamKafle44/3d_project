@@ -219,10 +219,14 @@ class PyTorch3DScene(DifferentiableScene):
         # Adversary-controlled parameters (Tensors for Autograd)
         # Keep the two shared adversary controls as optimizer-ready leaves.
         self.pos = torch.zeros(3, device=self.device, requires_grad=True)
-        self.rot_deg = torch.zeros(3, device=self.device)  # yaw, pitch, roll
+        self.rot_deg = torch.zeros(
+            3, device=self.device, requires_grad=True
+        )  # yaw, pitch, roll
         self.ambient_intensity = torch.tensor(
             1.0, device=self.device, requires_grad=True
         )
+        self.shirt_color_parameter = None
+        self._active_differentiable_property = None
         self.light_position = torch.tensor(
             config.LIGHT["position"], dtype=torch.float32, device=self.device
         )
@@ -503,7 +507,10 @@ class PyTorch3DScene(DifferentiableScene):
             )
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
-        self.rot_deg = torch.tensor([yaw, pitch, roll], device=self.device, dtype=torch.float32)
+        self.rot_deg = torch.tensor(
+            [yaw, pitch, roll], device=self.device, dtype=torch.float32,
+            requires_grad=True,
+        )
 
     def get_rotation_deg(self) -> np.ndarray:
         return self.rot_deg.detach().cpu().numpy().copy()
@@ -522,12 +529,20 @@ class PyTorch3DScene(DifferentiableScene):
         mesh = self.parts.get(part_name)
         if mesh is None:
             return
+        if part_name == "shirt" and self.shirt_color_parameter is not None:
+            with torch.no_grad():
+                self.shirt_color_parameter.copy_(
+                    torch.as_tensor(rgb, device=self.device, dtype=torch.float32)
+                )
+            self.shirt_color_parameter.grad = None
         n_verts = mesh.verts_packed().shape[0]
         color = torch.tensor(rgb, device=self.device, dtype=torch.float32)
         colors = color.unsqueeze(0).expand(n_verts, 3).unsqueeze(0).clone()
         mesh.textures = TexturesVertex(verts_features=colors)
 
     def get_material_color(self, part_name: str) -> np.ndarray:
+        if part_name == "shirt" and self.shirt_color_parameter is not None:
+            return self.shirt_color_parameter.detach().cpu().numpy().copy()
         mesh = self.parts.get(part_name)
         if mesh is not None and hasattr(mesh.textures, "verts_features_list"):
             return mesh.textures.verts_features_list()[0][0].detach().cpu().numpy().copy()
@@ -648,6 +663,12 @@ class PyTorch3DScene(DifferentiableScene):
 
             m = mesh.clone()
             m = m.update_padded(verts.unsqueeze(0))
+            if name == "shirt" and self._active_differentiable_property == "CLOTHING":
+                if self.shirt_color_parameter is None:
+                    raise RuntimeError("Initialize differentiable parameters before clothing rendering")
+                vertex_count = m.verts_packed().shape[0]
+                colors = self.shirt_color_parameter.view(1, 1, 3).expand(1, vertex_count, 3)
+                m.textures = TexturesVertex(verts_features=colors)
 
             meshes.append(m)
 
@@ -763,6 +784,14 @@ class PyTorch3DScene(DifferentiableScene):
 
         return img.permute(2, 0, 1)
 
-    def differentiable_parameters(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Return the shared optimizer leaves: group position and light scale."""
-        return self.pos, self.ambient_intensity
+    def differentiable_parameters(self):
+        """Return the optimizer leaves shared by differentiable searches."""
+        if self.shirt_color_parameter is None:
+            if "shirt" not in self.parts:
+                color = torch.full((3,), 0.8, device=self.device, dtype=torch.float32)
+            else:
+                color = torch.as_tensor(
+                    self.get_material_color("shirt"), device=self.device, dtype=torch.float32
+                )
+            self.shirt_color_parameter = torch.nn.Parameter(color.detach().clone())
+        return self.pos, self.rot_deg, self.ambient_intensity, self.shirt_color_parameter

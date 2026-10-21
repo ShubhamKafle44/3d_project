@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import torch
@@ -10,7 +11,7 @@ import config
 from renderer import DifferentiableScene
 
 if TYPE_CHECKING:
-    from detector import HumanDetectionClassifier
+    from detector import ObjectDetectionClassifier
 
 PROPERTIES = ("POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING")
 
@@ -19,13 +20,9 @@ def _get_property(scene: DifferentiableScene, prop: str):
     if prop == "POSITION":
         return scene.get_position()
     if prop == "ROTATION":
-        rotation = scene.get_rotation_deg()
-        rotation[1:] = 0.0
-        return rotation
+        return scene.get_rotation_deg()
     if prop == "POSE":
-        rotation = scene.get_rotation_deg()
-        rotation[1:] = 0.0
-        return (scene.get_position(), rotation)
+        return scene.get_position(), scene.get_rotation_deg()
     if prop == "LIGHTING":
         return scene.get_lighting()
     if prop == "CLOTHING":
@@ -51,62 +48,15 @@ def _set_property(scene: DifferentiableScene, prop: str, value) -> None:
         raise ValueError(prop)
 
 
-def _perturb(current, prop: str, step_size: float):
-    if prop == "POSE":
-        position, rotation = current
-        position_step = config.SEARCH.get("pose_position_step", 0.1)
-        rotation_step = config.SEARCH.get("pose_rotation_step_deg", 10.0)
-        position_noise = np.array([np.random.normal(0, position_step), 0.0,
-                                   np.random.normal(0, position_step)])
-        # Keep the person upright: only yaw (rotation about the vertical
-        # axis) is a search variable. Pitch and roll are fixed at zero.
-        yaw = (float(rotation[0]) + np.random.normal(0, rotation_step)) % 360.0
-        return (np.asarray(position) + position_noise,
-                np.array([yaw, 0.0, 0.0], dtype=np.float32))
-    if prop == "POSITION":
-        # Both scene formats are Y-up: the model's feet are near Y=0 and its
-        # height extends along Y. Keep that grounding coordinate fixed and
-        # search only across the X/Z ground plane. The renderer rejects a
-        # proposal when its projected subject bounds leave the image.
-        noise = np.array([
-            np.random.normal(0, step_size),
-            0.0,
-            np.random.normal(0, step_size),
-        ])
-        return np.asarray(current) + noise
-    lo, hi = config.PROPERTY_BOUNDS[prop]
-    if prop == "ROTATION":
-        # Yaw only; pitch and roll tilt the person away from upright.
-        yaw = (float(np.asarray(current)[0]) + np.random.normal(0, step_size)) % 360.0
-        return np.array([yaw, 0.0, 0.0], dtype=np.float32)
-    if prop == "CLOTHING":
-        noise = np.random.normal(0, step_size, size=3)
-        return np.clip(np.asarray(current) + noise, lo, hi)
-    else:  # LIGHTING - scalar
-        noise = np.random.normal(0, step_size)
-        return float(np.clip(current + noise, lo, hi))
-
-
 def _format_property(prop: str, value) -> str:
     if prop == "POSE":
         position, rotation = value
         return (f"position=({position[0]:+.3f}, {position[1]:+.3f}, {position[2]:+.3f}) "
-                f"yaw={rotation[0]:+.1f}° (pitch=0°, roll=0°)")
+                f"rotation=({rotation[0]:+.1f}°, {rotation[1]:+.1f}°, {rotation[2]:+.1f}°)")
     if prop in ("POSITION", "ROTATION", "CLOTHING"):
         a, b, c = np.asarray(value).tolist()
         return f"{prop.lower()}=({a:+.3f}, {b:+.3f}, {c:+.3f})"
     return f"{prop.lower()}=({float(value):+.3f})"
-
-
-def _format_scene_parameters(scene: DifferentiableScene, shirt_colors: torch.Tensor) -> str:
-    """Summarize the differentiable attack state without printing every vertex."""
-    mean_shirt_color = shirt_colors.detach().mean(dim=0).cpu().numpy()
-    return " ".join((
-        _format_property("POSITION", scene.get_position()),
-        _format_property("ROTATION", scene.get_rotation_deg()),
-        _format_property("LIGHTING", scene.get_lighting()),
-        _format_property("CLOTHING", mean_shirt_color),
-    ))
 
 
 @dataclass
@@ -118,206 +68,169 @@ class SearchResult:
     best_property_value: object
 
 
-def run_adversarial_search(
+def run_gradient_descent(
     scene: DifferentiableScene,
-    classifier: "HumanDetectionClassifier",
+    classifier: "ObjectDetectionClassifier",
     property_name: str,
     epochs: int = 100,
-    step_size: float = 0.1,
-    success_threshold: Optional[float] = None,
-    verbose: bool = True,
-) -> SearchResult:
-    if property_name not in PROPERTIES:
-        raise ValueError(f"property must be one of {PROPERTIES}, got {property_name!r}")
-    success_threshold = success_threshold if success_threshold is not None else config.SEARCH["success_threshold"]
-
-    # Start upright as well as keeping every proposed orientation upright.
-    if property_name in ("ROTATION", "POSE"):
-        initial_yaw = float(scene.get_rotation_deg()[0])
-        scene.set_rotation_deg(initial_yaw, 0.0, 0.0)
-
-    if property_name in ("POSITION", "POSE"):
-        initial_position = scene.get_position()
-        if not scene.is_position_valid(initial_position):
-            raise RuntimeError(
-                "The initial human position is outside the camera frame or "
-                "intersects scene geometry; refusing to start the search."
-            )
-
-    initial_img = scene.render()
-    if initial_img is None:
-        raise RuntimeError("Initial render returned None - check mesh paths in config.py")
-
-    initial_result = classifier.classify(initial_img)
-    best_prob = initial_result["human_prob"]
-    best_img = initial_img.copy()
-    best_step = 0
-    current_value = _get_property(scene, property_name)
-    best_value = current_value
-
-    if verbose:
-        print(f"Initial human_prob = {best_prob * 100:.2f}%")
-        print(f"{'Step':>4} {'HumanProb':>10}  {'TopLabel':<10} Parameters")
-        print("-" * 70)
-
-    # There is nothing to optimize when the initial render already meets the
-    # requested detector threshold.  Besides avoiding unnecessary rendering,
-    # this keeps a POSITION search from proposing candidates after success.
-    if best_prob <= success_threshold:
-        if verbose:
-            print(
-                f"Success at step 0: human_prob {best_prob * 100:.2f}% <= "
-                f"{success_threshold * 100:.0f}%"
-            )
-        return SearchResult(True, 0, best_prob, best_img, best_value)
-
-    for step in range(1, epochs + 1):
-        proposal = _perturb(current_value, property_name, step_size)
-        if property_name == "POSE":
-            scene.set_rotation_deg(*proposal[1])
-            valid_position = scene.is_position_valid(proposal[0])
-            _set_property(scene, property_name, current_value)
-            if not valid_position:
-                if verbose:
-                    print(f"{step:4d} {'rejected':>10} {'invalid':>8}  {'':<10} "
-                          f"{_format_property(property_name, proposal)}")
-                continue
-        if property_name == "POSITION" and not scene.is_position_valid(proposal):
-            if verbose:
-                print(f"{step:4d} {'rejected':>10} {'invalid':>8}  {'':<10} "
-                      f"{_format_property(property_name, proposal)}")
-            continue
-        _set_property(scene, property_name, proposal)
-
-        if property_name in ("POSITION", "POSE"):
-            requested_position = proposal if property_name == "POSITION" else proposal[0]
-            applied_position = scene.get_position()
-            if (
-                not np.allclose(applied_position, requested_position, atol=1e-5)
-                or not scene.is_position_valid(applied_position)
-            ):
-                _set_property(scene, property_name, current_value)
-                if verbose:
-                    print(f"{step:4d} {'rejected':>10} {'frame check':>12}  "
-                          f"{_format_property(property_name, proposal)}")
-                continue
-
-        img = scene.render()
-        if img is None:
-            continue
-
-        result = classifier.classify(img)
-        human_prob = result["human_prob"]
-
-        if human_prob < best_prob:
-            best_prob, best_step, best_img, best_value = human_prob, step, img.copy(), proposal
-            current_value = proposal
-        else:
-            _set_property(scene, property_name, current_value)  # revert
-
-        if verbose:
-            print(f"{step:4d} {human_prob * 100:9.2f}%  "
-                  f"{result['top_label']:<10} {_format_property(property_name, proposal)}")
-
-        if best_prob <= success_threshold:
-            if verbose:
-                print("-" * 70)
-                print(f"Success at step {step}: human_prob {best_prob * 100:.2f}% <= "
-                      f"{success_threshold * 100:.0f}%")
-            _set_property(scene, property_name, best_value)
-            return SearchResult(True, best_step, best_prob, best_img, best_value)
-
-    if verbose:
-        print("-" * 70)
-        print(f"Did not reach threshold in {epochs} epochs. "
-              f"Best: step {best_step}, human_prob {best_prob * 100:.2f}%")
-    _set_property(scene, property_name, best_value)
-    return SearchResult(False, best_step, best_prob, best_img, best_value)
-
-
-def run_3d_appearance_attack(
-    scene,
-    classifier: "HumanDetectionClassifier",
-    epochs: int = 200,
-    learning_rate: float = 0.03,
-    validate_every: int = 10,
+    learning_rate: float = 0.06,
+    validate_every: int = 5,
     detector_input_size: int = 384,
     success_threshold: Optional[float] = None,
     verbose: bool = True,
 ) -> SearchResult:
-    """Optimize a renderable shirt appearance through PyTorch3D.
+    """Use renderer gradients and Adam to minimize the target-class score."""
 
-    The optimized values are mesh vertex colors, not image pixels.  Gradients
-    flow from Faster R-CNN's pre-NMS RPN logits through the rendered shirt.
-    """
-    if not hasattr(scene, "render_differentiable") or not hasattr(scene, "set_vertex_colors"):
-        raise TypeError("3D appearance attack requires the PyTorch3D renderer")
-    success_threshold = success_threshold if success_threshold is not None else config.SEARCH["success_threshold"]
-    # The detector supplies gradients to the rendered image but is never
-    # trained; freezing it substantially reduces CUDA memory use.
-    for parameter in classifier.model.parameters():
-        parameter.requires_grad_(False)
-    shirt = scene.parts["shirt"]
-    vertex_count = shirt.verts_packed().shape[0]
-    base_color = scene.get_material_color("shirt")
-    base_logits = torch.logit(
-        torch.tensor(base_color, device=scene.device, dtype=torch.float32).clamp(0.01, 0.99)
-    )
-    color_logits = torch.nn.Parameter(base_logits.expand(vertex_count, 3).clone())
-    optimizer = torch.optim.Adam([color_logits], lr=learning_rate)
+    if not hasattr(scene, "differentiable_parameters"):
+        raise TypeError("Gradient search requires differentiable scene parameters")
+
+    
+    loss_function = getattr(classifier, "target_detection_loss", None)
+
+
+    if loss_function is None:
+        loss_function = getattr(classifier, "person_detection_loss", None)
+    if loss_function is None:
+        raise TypeError("Gradient search requires a differentiable target-detection loss")
+    if epochs < 1 or validate_every < 1:
+        raise ValueError("epochs and validate_every must both be positive")
+    if success_threshold is None:
+        success_threshold = config.SEARCH["success_threshold"]
+
+    initial_position = scene.get_position().astype(np.float32)
+    if property_name in ("POSITION", "POSE") and not scene.is_position_valid(initial_position):
+        raise RuntimeError("Initial position is outside the frame or intersects scene geometry")
+
+    scene._active_differentiable_property = property_name
+    parameters = scene.differentiable_parameters()
+
+    
+    if property_name == "CLOTHING":
+        has_shirt = bool(
+            getattr(scene, "parts", {}).get("shirt")
+            or getattr(scene, "_part_shapes", {}).get("shirt")
+        )
+        if not has_shirt:
+            raise ValueError("CLOTHING optimization requires a model part named 'shirt'")
+        if hasattr(scene, "_shirt_color_override"):
+            scene._shirt_color_override = tuple(
+                parameters[3].detach().cpu().numpy().tolist()
+            )
 
     initial_img = scene.render()
     if initial_img is None:
         raise RuntimeError("Initial render returned None")
     initial_result = classifier.classify(initial_img)
-    best_prob, best_step, best_img = initial_result["human_prob"], 0, initial_img.copy()
-    best_colors = torch.sigmoid(color_logits).detach().clone()
+    score_key = "target_prob" if "target_prob" in initial_result else "human_prob"
+    target_name = getattr(classifier, "target_name", "person")
+    best_prob = initial_result[score_key]
+    best_img = initial_img.copy()
+    best_step = 0
+    best_value = _get_property(scene, property_name)
 
     if verbose:
-        print(f"Initial human_prob = {best_prob * 100:.2f}%")
-        print(
-            f"{'Step':>4} {'Surrogate':>10} {'HumanProb':>10} "
-            "Parameters"
-        )
-        print("-" * 150)
+        print(f"Initial {target_name}_prob = {best_prob * 100:.2f}%")
+        print(f"{'Step':>4} {'Loss':>10} {target_name + 'Prob':>10} Parameters")
+        print("-" * 88)
+
+    if best_prob <= success_threshold:
+        if verbose:
+            print(f"Success at step 0: {target_name}_prob {best_prob * 100:.2f}%")
+        return SearchResult(True, 0, best_prob, best_img, best_value)
+
+    parameter_indices = {
+        "POSITION": (0,),
+        "ROTATION": (1,),
+        "POSE": (0, 1),
+        "LIGHTING": (2,),
+        "CLOTHING": (3,),
+    }[property_name]
+    optimized_parameters = [parameters[index] for index in parameter_indices]
+    for model_parameter in classifier.model.parameters():
+        model_parameter.requires_grad_(False)
+    optimizer = torch.optim.Adam(optimized_parameters, lr=learning_rate)
 
     for step in range(1, epochs + 1):
-        colors = torch.sigmoid(color_logits)
-        scene.set_vertex_colors("shirt", colors)
-        rendered = scene.render_differentiable()
-        loss = classifier.person_detection_loss(
-            rendered,
-            input_size=detector_input_size,
-            person_weight=config.SEARCH["gradient_person_loss_weight"],
-            rpn_weight=config.SEARCH["gradient_rpn_loss_weight"],
-        )
+        previous_values = [parameter.detach().clone() for parameter in optimized_parameters]
         optimizer.zero_grad(set_to_none=True)
+
+        differentiable_image = scene.render_differentiable()
+        loss = loss_function(
+            differentiable_image,
+            input_size=detector_input_size,
+        )
+        if not torch.isfinite(loss):
+            raise RuntimeError(f"Non-finite detector loss at gradient step {step}")
         loss.backward()
+        if any(
+            parameter.grad is None or not torch.isfinite(parameter.grad).all()
+            for parameter in optimized_parameters
+        ):
+            raise RuntimeError(
+                f"{type(scene).__name__} did not produce a finite "
+                f"{property_name.lower()} gradient at step {step}"
+            )
         optimizer.step()
+
+        with torch.no_grad():
+            if property_name in ("POSITION", "POSE"):
+                position_parameter = parameters[0]
+                position_parameter[1] = torch.as_tensor(
+                    initial_position[1],
+                    device=position_parameter.device,
+                    dtype=position_parameter.dtype,
+                )
+            if property_name in ("ROTATION", "POSE"):
+                # Bound pitch and roll to keep the subject near upright.
+                rotation_parameter = parameters[1]
+                rotation_parameter[1:].clamp_(-45.0, 45.0)
+            if property_name == "LIGHTING":
+                parameters[2].clamp_(min=config.PROPERTY_BOUNDS["LIGHTING"][0])
+            if property_name == "CLOTHING":
+                parameters[3].clamp_(0.0, 1.0)
+
+        if property_name in ("POSITION", "POSE", "ROTATION"):
+            # Reject updates that move any part of the subject out of view or
+            # intersect the environment. The renderers read these live leaves.
+            with torch.no_grad():
+                if not scene.is_position_valid(scene.get_position()):
+                    for parameter, previous_value in zip(optimized_parameters, previous_values):
+                        parameter.copy_(previous_value)
+                    for state in optimizer.state.values():
+                        for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq"):
+                            if key in state:
+                                state[key].zero_()
 
         if step % validate_every != 0 and step != epochs:
             continue
-        with torch.no_grad():
-            scene.set_vertex_colors("shirt", torch.sigmoid(color_logits))
-            image = scene.render_differentiable()
-            image_np = (image.permute(1, 2, 0).clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)
-        result = classifier.classify(image_np)
-        human_prob = result["human_prob"]
-        if human_prob < best_prob:
-            best_prob, best_step, best_img = human_prob, step, image_np.copy()
-            best_colors = torch.sigmoid(color_logits).detach().clone()
+
+        image = scene.render()
+        if image is None:
+            continue
+        result = classifier.classify(image)
+        target_prob = result[score_key]
+        current_value = _get_property(scene, property_name)
+        if target_prob < best_prob:
+            best_prob = target_prob
+            best_step = step
+            best_img = image.copy()
+            best_value = current_value
+
         if verbose:
-            parameters = _format_scene_parameters(scene, torch.sigmoid(color_logits))
             print(
-                f"{step:4d} {loss.item():10.4f} {human_prob * 100:9.2f}% "
-                f"{parameters}"
+                f"{step:4d} {loss.item():10.4f} {target_prob * 100:9.2f}% "
+                f"{_format_property(property_name, current_value)}"
             )
         if best_prob <= success_threshold:
             break
 
-    scene.set_vertex_colors("shirt", best_colors)
+    _set_property(scene, property_name, best_value)
     return SearchResult(
-        best_prob <= success_threshold, best_step, best_prob, best_img, best_colors.cpu().numpy()
+        best_prob <= success_threshold,
+        best_step,
+        best_prob,
+        best_img,
+        best_value,
     )
 
 

@@ -6,16 +6,19 @@ from renderer import DifferentiableScene, build_scene
 from renderer.collision import obj_bounds
 
 
+# GET ALL THE REQUIRED FILES IN THE CURRENT DIRECTORY
 PIPELINE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = PIPELINE_DIR / "assets" / "3D_MODELS"
 ENVIRONMENT_DIR = PIPELINE_DIR / "assets" / "3D_ENVIRONMENTS"
 
 
+# FIND AND RETURN THE FILE
 def _resolve_path(reference: str, asset_root: Path) -> Path:
     """Resolve an explicit path first, then a name within an asset library."""
     path = Path(reference).expanduser()
     if path.exists():
         return path.resolve()
+    
     library_path = asset_root / reference
     if library_path.exists():
         return library_path.resolve()
@@ -28,6 +31,7 @@ def _resolve_path(reference: str, asset_root: Path) -> Path:
     )
 
 
+#RETURNS THE MESH PARTS ANF FILE PATH IN A DICTIONARY {'MESH1': /../}
 def _model_parts(model: str | None) -> dict[str, str]:
     """Return named OBJ parts for a built-in model, OBJ file, or model folder."""
     if model in (None, "human"):
@@ -51,8 +55,7 @@ def _model_parts(model: str | None) -> dict[str, str]:
 
     parts = {}
     for obj_path in obj_files:
-        # Use the stem as a useful material/part name (so a part named
-        # "shirt" continues to work with the optional appearance attack).
+        # Use the stem as a useful material/part name 
         name = obj_path.stem
         if name in parts:
             relative_name = obj_path.relative_to(path).with_suffix("") if path.is_dir() else obj_path
@@ -63,6 +66,8 @@ def _model_parts(model: str | None) -> dict[str, str]:
     return parts
 
 
+
+# RESOLVES THE PATH FOR THE ENVIRONMENT
 def _environment_path(environment: str | None) -> str | None:
     """Resolve an optional single-OBJ environment, or None for a plain scene."""
     if environment is None or environment.lower() in {"none", "off"}:
@@ -89,21 +94,8 @@ def _environment_path(environment: str | None) -> str | None:
     raise ValueError(f"Environment must be an OBJ file, folder, or 'none': {path}")
 
 
-def available_assets() -> tuple[list[str], list[str]]:
-    """List built-in names and top-level entries selectable from the CLI."""
-    def entries(root: Path) -> list[str]:
-        if not root.is_dir():
-            return []
-        return sorted(
-            path.name for path in root.iterdir()
-            if path.is_dir() or (path.is_file() and path.suffix.lower() == ".obj")
-        )
 
-    models = list(dict.fromkeys(["human", *entries(MODEL_DIR)]))
-    environments = list(dict.fromkeys(["studio", "none", *entries(ENVIRONMENT_DIR)]))
-    return models, environments
-
-
+# THIS FUNCTION ENSURES THE MODEL IS VISIBLE IN THE SCENE
 def _camera_for_model(parts: dict[str, str], is_default_model: bool) -> dict:
     """Keep the tuned default-human view, and fit custom model bounds to view."""
     camera = dict(config.CAMERA)
@@ -121,15 +113,17 @@ def _camera_for_model(parts: dict[str, str], is_default_model: bool) -> dict:
     return camera
 
 
-def build_human_scene(
+def build_scene_layout(
     backend: str,
     device: str,
     image_size: int | None = None,
     model: str | None = "human",
     environment: str | None = "studio",
 ) -> DifferentiableScene:
+
+    #THIS RETURNS THE RENDERER CLASS
     scene = build_scene(
-        backend, device=device, image_size=image_size or config.IMAGE_SIZE
+        backend, device=device, image_size=image_size
     )
 
     parts = _model_parts(model)
@@ -146,10 +140,13 @@ def build_human_scene(
 
     scene.set_camera_orbit(**_camera_for_model(parts, model in (None, "human")))
 
+
+    #PYTORCH3D uses DEFAULT AMBIENT LIGHT SO TO AVOID ADDITIONAL LIGHTING WE USE LIGHTING JUST FOR MITSUBA
     light_intensity = (
         config.AMBIENT_LIGHT["intensity"]
         if backend == "mitsuba"
-        else config.LIGHT["intensity"]
+            else config.LIGHT["intensity"]
     )
     scene.set_lighting(light_intensity)
+
     return scene

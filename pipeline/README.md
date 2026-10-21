@@ -1,7 +1,7 @@
 # Differentiable-Rendering Adversarial Search
 
-Finds camera/lighting/pose parameters where a COCO object detector
-(Faster R-CNN or RetinaNet) fails to recognize a rendered 3D human mesh.
+Finds camera/lighting/pose parameters where a COCO object detector fails to
+recognize the selected class in a rendered 3D model.
 Two interchangeable rendering backends — PyTorch3D and Mitsuba/Dr.Jit —
 sit behind one shared interface, so you can attack the same scene through
 either renderer with the same CLI.
@@ -10,9 +10,9 @@ either renderer with the same CLI.
 
 ```
 config.py              # <- point this at your real .obj files
-detector.py             # COCO detector wrapper -> human_prob score
+detector.py             # COCO detector wrapper -> selected target-class score
 scene_setup.py          # builds a scene from config.py, auto-frames subject
-search.py               # black-box random search over scene properties
+search.py               # differentiable search over scene properties
 main.py                 # CLI entrypoint
 renderer/
   base.py                # DifferentiableScene interface both backends implement
@@ -66,7 +66,9 @@ cd pipeline
 python main.py
 ```
 
-`main.py` currently selects the renderer, detector, and property through variables near the top of the file. Change those values there before launching. For the PyTorch3D `gradient_appearance` mode, select the Faster R-CNN model; RetinaNet is supported for random search.
+The `renderer`, `property`, and `detector_target` variables near the top of `main.py` select the renderer, differentiable target, and COCO class. Both renderers support `POSITION`, `LIGHTING`, `ROTATION`, `CLOTHING`, and `POSE` (position plus rotation). Set `detector_target` to a class such as `person`, `car`, or `dog`. The search uses a differentiable target-class surrogate and periodically checks that class's actual detector score.
+
+Mitsuba uses `llvm_ad_rgb` by default for CPU differentiation. On a compatible NVIDIA setup, set `MITSUBA_VARIANT=cuda_ad_rgb` before starting the process to use the CUDA AD variant.
 
 ### Choose a 3D model and environment
 
@@ -105,23 +107,19 @@ The script writes a timestamped log and PID file under `pipeline/outputs/`, then
 
 ## Output
 
-- `outputs/initial_render.png` — the starting render
-- `outputs/adversarial_result_<renderer>_<property>.png` — the render with
-  the lowest human-detection confidence found
-- Console log shows human_prob at every step and the final result
+- `outputs/<model>_<environment>_initial_render.png` — the starting render
+- `outputs/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with
+  the lowest target-class confidence found
+- Console log shows the selected target-class probability at every step and the final result
 
 ## Notes
 
-- The search is **black-box** (random search on the rendered image →
-  detector score), so it works identically for both renderer backends
-  regardless of whether their AD graph is exposed. Both renderers *are*
-  differentiable internally (that's the point of using PyTorch3D /
-  Mitsuba), so if you want a **gradient-based** attack instead, see the
-  notes at the bottom of `pytorch3d_renderer.py` and
-  `mitsuba_renderer.py` for how to expose per-parameter gradients through
-  each backend's own AD system (`torch.autograd` / Dr.Jit AD).
+- Gradient search minimizes a differentiable surrogate for the selected COCO
+  class, then periodically checks the detector's actual score for that class.
+  Mitsuba represents clothing as
+  a uniform diffuse shirt color during optimization.
 - The default multipart model is in `assets/3D_MODELS/human/`; replace or add
   assets in the model and environment libraries to try other scenes.
-- The Mitsuba backend defaults to CPU (`scalar_rgb` variant); switch to
-  `cuda_ad_rgb` (set `MITSUBA_VARIANT` env var) if you have a GPU and want
-  it to run faster or want AD.
+- The Mitsuba renderer uses `llvm_ad_rgb` by default so gradient mode works
+  on CPU. Set `MITSUBA_VARIANT=cuda_ad_rgb` before launch to use Mitsuba AD
+  on a compatible NVIDIA GPU.
