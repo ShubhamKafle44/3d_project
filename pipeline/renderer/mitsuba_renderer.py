@@ -36,11 +36,12 @@ def linear_to_srgb(x):
 
 
 def _srgb_output() -> bool:
-    # Same as render_background.py (srgb_gamma=True). Set config.MITSUBA_SRGB_OUTPUT = False to disable.
+    """Report whether rendered images should be converted to display-ready sRGB."""
     return bool(getattr(config, "MITSUBA_SRGB_OUTPUT", True))
 
 
 def torch_from_numpy(array):
+    """Copy an array into a float32 Torch tensor for the autograd bridge."""
     return torch.from_numpy(np.array(array, copy=True).astype(np.float32))
 
 
@@ -51,6 +52,7 @@ def read_materials(obj_path: Path) -> dict:
         mtl_files = [l.split(maxsplit=1)[1].strip() for l in f if l.startswith("mtllib ")]
 
     def resolve(rest, base):
+        """Resolve a material texture path, including paths with map options."""
         rest = rest.strip()
         p = (base / rest).resolve()
         if p.is_file():
@@ -79,7 +81,7 @@ def read_materials(obj_path: Path) -> dict:
 
 
 def split_materials(obj_path: Path, textures: dict, output_dir: Path):
-    """Split one OBJ into one OBJ per textured material (+ None for untextured faces)."""
+    """Write one OBJ per material so each texture can use its own BSDF."""
     paths = {name: output_dir / f"material_{i}.obj" for i, name in enumerate([None, *textures])}
     counts = dict.fromkeys(paths, 0)
     current_material = None
@@ -105,6 +107,7 @@ def split_materials(obj_path: Path, textures: dict, output_dir: Path):
 
 
 def texture_bsdf(info: dict, temp_dir: Path) -> dict:
+    """Build a Mitsuba material for a diffuse texture and optional alpha mask."""
     bsdf = {
         "type": "twosided",
         "nested_bsdf": {
@@ -130,6 +133,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, scene: "MitsubaScene", position, rotation, lighting, shirt_color):
+        """Render the scene and retain Dr.Jit parameters for the backward pass."""
         pos = position.detach().cpu().numpy().astype(np.float32)
         rot_deg = rotation.detach().cpu().numpy().astype(np.float32)
         intensity = float(lighting.detach().cpu())
@@ -202,6 +206,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        """Map image gradients back to position, rotation, light, and shirt color."""
         image_t, = ctx.saved_tensors
         grad = grad_output.permute(1, 2, 0).contiguous()
         grad = grad * ((image_t >= 0.0) & (image_t <= 1.0)).to(grad.dtype)
@@ -267,6 +272,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
 class MitsubaScene(DifferentiableScene):
     def __init__(self, device: str = "cpu", image_size: int = 512):
+        """Initialize scene state, render settings, and differentiable parameters."""
         self.image_size = image_size
         self._spp = config.MITSUBA_SPP
 
@@ -301,6 +307,7 @@ class MitsubaScene(DifferentiableScene):
 
     # ---- asset loading ---------------------------------------------
     def load_mesh(self, path: str, name: str = "mesh") -> None:
+        """Load a subject part and update the bounds used for placement checks."""
         self._part_paths[name] = path
         self._part_colors.setdefault(name, (0.8, 0.8, 0.8))
         lower, upper = obj_bounds(path)
@@ -325,9 +332,11 @@ class MitsubaScene(DifferentiableScene):
         self._part_shapes[name] = shapes
 
     def _part_shape_keys(self) -> list:
+        """Return the Mitsuba scene keys for all loaded subject shapes."""
         return [key for shapes in self._part_shapes.values() for key, _, _ in shapes]
 
     def load_background(self, path: str) -> None:
+        """Load the background mesh and cache its face bounds and materials."""
         self._background_path = path
         self._background_face_lower, self._background_face_upper = obj_face_bounds(path)
         self._build_background_shapes(Path(path).resolve())
@@ -357,6 +366,7 @@ class MitsubaScene(DifferentiableScene):
 
     # ---- position / rotation ----------------------------------------
     def set_position(self, x: float, y: float, z: float) -> None:
+        """Set the subject position when it remains visible and collision-free."""
         candidate = np.array([x, y, z], dtype=np.float32)
         if not self.is_position_valid(candidate):
             return
@@ -367,6 +377,7 @@ class MitsubaScene(DifferentiableScene):
             self.position_parameter.grad = None
 
     def get_position(self) -> np.ndarray:
+        """Return the current position, including any active Torch parameter."""
         if getattr(self, "position_parameter", None) is not None:
             return self.position_parameter.detach().cpu().numpy().copy()
         return self.pos.copy()
@@ -432,6 +443,7 @@ class MitsubaScene(DifferentiableScene):
         )
 
     def set_rotation_deg(self, yaw: float, pitch: float = 0.0, roll: float = 0.0) -> None:
+        """Set yaw, pitch, and roll in degrees and sync the optimizer parameter."""
         self.rot_deg = np.array([yaw, pitch, roll], dtype=np.float32)
         if self.rotation_parameter is not None:
             with torch.no_grad():
@@ -439,12 +451,14 @@ class MitsubaScene(DifferentiableScene):
             self.rotation_parameter.grad = None
 
     def get_rotation_deg(self) -> np.ndarray:
+        """Return the current yaw, pitch, and roll values in degrees."""
         if self.rotation_parameter is not None:
             return self.rotation_parameter.detach().cpu().numpy().copy()
         return self.rot_deg.copy()
 
     # ---- lighting -----------------------------------------------------
     def set_lighting(self, intensity: float) -> None:
+        """Set the key-light intensity and sync any active Torch parameter."""
         self.ambient_intensity = float(intensity)
         if getattr(self, "lighting_parameter", None) is not None:
             with torch.no_grad():
@@ -452,12 +466,14 @@ class MitsubaScene(DifferentiableScene):
             self.lighting_parameter.grad = None
 
     def get_lighting(self) -> float:
+        """Return the current key-light intensity."""
         if getattr(self, "lighting_parameter", None) is not None:
             return float(self.lighting_parameter.detach().cpu())
         return self.ambient_intensity
 
     # ---- material -------------------------------------------------------
     def set_material_color(self, part_name: str, rgb: Tuple[float, float, float]) -> None:
+        """Set a part's fallback color and update the differentiable shirt color."""
         self._part_colors[part_name] = tuple(float(c) for c in rgb)
         if part_name == "shirt" and self.shirt_color_parameter is not None:
             with torch.no_grad():
@@ -467,6 +483,7 @@ class MitsubaScene(DifferentiableScene):
                 self._shirt_color_override = tuple(float(c) for c in rgb)
 
     def get_material_color(self, part_name: str) -> np.ndarray:
+        """Return the current color for a part as an RGB NumPy array."""
         if part_name == "shirt" and self.shirt_color_parameter is not None:
             return self.shirt_color_parameter.detach().cpu().numpy().copy()
         return np.array(self._part_colors.get(part_name, (0.8, 0.8, 0.8)))
@@ -480,6 +497,7 @@ class MitsubaScene(DifferentiableScene):
         target: Tuple[float, float, float] = (0.0, 0.0, 0.0),
         fov: float = 40.0,
     ) -> None:
+        """Configure the orbit camera's distance, angle, target, and field of view."""
         self._cam_distance = distance
         self._cam_elev = elevation
         self._cam_azim = azimuth
@@ -488,26 +506,32 @@ class MitsubaScene(DifferentiableScene):
 
     @property
     def cam_distance(self) -> float:
+        """Return the camera's orbit distance."""
         return self._cam_distance
 
     @property
     def cam_elev(self) -> float:
+        """Return the camera's elevation angle in degrees."""
         return self._cam_elev
 
     @property
     def cam_azim(self) -> float:
+        """Return the camera's azimuth angle in degrees."""
         return self._cam_azim
 
     @property
     def cam_target(self) -> Tuple[float, float, float]:
+        """Return the point the camera looks at."""
         return self._cam_target
 
     @property
     def cam_fov(self) -> float:
+        """Return the camera's perspective field of view in degrees."""
         return self._cam_fov
 
     # ---- scene assembly -------------------------------------------------
     def _camera_origin(self) -> Tuple[float, float, float]:
+        """Convert the orbit camera settings into a world-space position."""
         elev_rad = np.radians(self._cam_elev)
         azim_rad = np.radians(self._cam_azim)
         d = self._cam_distance
@@ -527,6 +551,7 @@ class MitsubaScene(DifferentiableScene):
         return {"type": "prb" if differentiable else "path", "max_depth": depth}
 
     def _build_scene_dict(self, differentiable: bool = False) -> dict:
+        """Assemble Mitsuba's scene description from camera, lights, and meshes."""
         origin = self._camera_origin()
 
         scene_dict = {
@@ -624,6 +649,7 @@ class MitsubaScene(DifferentiableScene):
 
     # ---- render -------------------------------------------------------
     def render(self) -> Optional[np.ndarray]:
+        """Render an 8-bit RGB image for display, returning None on failure."""
         if not self._part_paths:
             return None
         try:

@@ -48,12 +48,12 @@ def main():
     property = "POSITION"
 
     #DEFINE MODELS
-    model = "human"
-    environment = "studio"
+    model = "Jeep"
+    environment = "street"
 
 
     detector_name = "fasterrcnn_resnet50_fpn_v2"
-    detector_target = "person"
+    detector_target = "car"
     success_threshold = config.SEARCH["success_threshold"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     scene_image_size = config.SEARCH["gradient_image_size"]

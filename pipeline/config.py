@@ -14,7 +14,7 @@ BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 # Rendering
 # --------------------------------------------------------------------------
 IMAGE_SIZE = 2048
-MITSUBA_SPP = 4
+MITSUBA_SPP = 10
 
 # Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
 MITSUBA_VARIANT = "cuda_ad_rgb"
