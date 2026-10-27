@@ -89,7 +89,8 @@ def main():
     # NAME OF THE IMAGE
     run_name = f"{_safe_name(model)}_{_safe_name(environment)}" 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    out_dir = output_root / f"{timestamp}_{run_name}"
+    learning_rate_label = f"{learning_rate:g}".replace(".", "p")
+    out_dir = output_root / f"{timestamp}_e{epochs}_lr{learning_rate_label}_{run_name}"
     out_dir.mkdir()
 
 

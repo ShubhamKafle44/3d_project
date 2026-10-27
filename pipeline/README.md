@@ -94,7 +94,8 @@ python main.py --model "delivery van/van.obj" --environment none --epochs 100
 
 The built-in `human` model and `studio` environment remain the defaults.
 Custom models are automatically framed from their OBJ bounds. Each run creates
-a timestamped folder under `pipeline/outputs/` containing the initial render,
+a timestamped folder labeled with its epoch and learning-rate settings under
+`pipeline/outputs/` containing the initial render,
 an image snapshot every 10 gradient steps, and the best result. Runs therefore
 do not overwrite images from earlier runs.
 
@@ -106,11 +107,23 @@ bash run_background.sh
 
 The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument, followed by `main.py` options. Set the Adam learning rate with `--learning-rate` (default: `0.06`), for example: `bash run_background.sh 100 --learning-rate 0.01`. To use the default epoch count, you can run `bash run_background.sh --learning-rate 0.01`. The same option works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
 
+To run a 10-by-10 grid of epoch and learning-rate settings sequentially:
+
+```bash
+bash run_sweep.sh
+```
+
+The sweep script's `EPOCHS` and `LEARNING_RATES` arrays define the 100
+combinations. It writes one log per run and a `summary.csv` under
+`outputs/sweeps/`. Each run is a separate Python process, so its CUDA and
+Dr.Jit allocations are released before the next run starts. The sweep
+continues after a failed run and records its exit status.
+
 ## Output
 
-- `outputs/<timestamp>_<model>_<environment>/<model>_<environment>_initial_render.png` — the starting render
-- `outputs/<timestamp>_<model>_<environment>/snapshots/step_<step>.png` — renders saved every 10 gradient steps
-- `outputs/<timestamp>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
+- `outputs/<timestamp>_e<epochs>_lr<rate>_<model>_<environment>/<model>_<environment>_initial_render.png` — the starting render
+- `outputs/<timestamp>_e<epochs>_lr<rate>_<model>_<environment>/snapshots/step_<step>.png` — renders saved every 10 gradient steps
+- `outputs/<timestamp>_e<epochs>_lr<rate>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
 - Console log shows the selected target-class probability at every step and the final result
 
 ## Notes
