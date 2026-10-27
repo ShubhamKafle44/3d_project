@@ -13,8 +13,8 @@ BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
-IMAGE_SIZE = 2048
-MITSUBA_SPP = 10
+IMAGE_SIZE = 1024
+MITSUBA_SPP = 2
 
 # Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
 MITSUBA_VARIANT = "cuda_ad_rgb"
@@ -56,7 +56,7 @@ DEFAULT_MATERIAL_COLORS = {
 # Adversarial search
 # --------------------------------------------------------------------------
 SEARCH = {
-    "epochs": 10000,
+    "epochs": 100,
     "success_threshold": 0.05,      
     "gradient_learning_rate": 0.06,
     "gradient_validate_every": 5,

@@ -93,9 +93,10 @@ python main.py --model "delivery van/van.obj" --environment none --epochs 100
 ```
 
 The built-in `human` model and `studio` environment remain the defaults.
-Custom models are automatically framed from their OBJ bounds. Each run saves
-its initial render and result with the selected model/environment names in the
-filename, so experimenting with another pair does not overwrite those images.
+Custom models are automatically framed from their OBJ bounds. Each run creates
+a timestamped folder under `pipeline/outputs/` containing the initial render,
+an image snapshot every 10 gradient steps, and the best result. Runs therefore
+do not overwrite images from earlier runs.
 
 To launch a 10,000-epoch search from inside `pipeline/` and keep it running after the terminal closes:
 
@@ -103,13 +104,13 @@ To launch a 10,000-epoch search from inside `pipeline/` and keep it running afte
 bash run_background.sh
 ```
 
-The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument, followed by any `main.py` options. For example: `bash run_background.sh 100 --model "delivery van" --environment warehouse`. `--epochs` also works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
+The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument, followed by `main.py` options. Set the Adam learning rate with `--learning-rate` (default: `0.06`), for example: `bash run_background.sh 100 --learning-rate 0.01`. To use the default epoch count, you can run `bash run_background.sh --learning-rate 0.01`. The same option works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
 
 ## Output
 
-- `outputs/<model>_<environment>_initial_render.png` — the starting render
-- `outputs/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with
-  the lowest target-class confidence found
+- `outputs/<timestamp>_<model>_<environment>/<model>_<environment>_initial_render.png` — the starting render
+- `outputs/<timestamp>_<model>_<environment>/snapshots/step_<step>.png` — renders saved every 10 gradient steps
+- `outputs/<timestamp>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
 - Console log shows the selected target-class probability at every step and the final result
 
 ## Notes

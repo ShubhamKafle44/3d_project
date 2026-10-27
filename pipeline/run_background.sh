@@ -10,7 +10,7 @@ fi
 OUTPUT_DIR="$SCRIPT_DIR/outputs"
 
 if [[ ! "$EPOCHS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "Usage: $0 [positive-epoch-count] [main.py options...]" >&2
+  echo "Usage: $0 [positive-epoch-count] [--learning-rate VALUE] [main.py options...]" >&2
   exit 2
 fi
 

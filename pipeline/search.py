@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -78,6 +79,8 @@ def run_gradient_descent(
     detector_input_size: int = 384,
     success_threshold: Optional[float] = None,
     verbose: bool = True,
+    snapshot_dir: Optional[str] = None,
+    snapshot_every: int = 10,
 ) -> SearchResult:
     """Use renderer gradients and Adam to minimize the target-class score."""
 
@@ -92,8 +95,10 @@ def run_gradient_descent(
         loss_function = getattr(classifier, "person_detection_loss", None)
     if loss_function is None:
         raise TypeError("Gradient search requires a differentiable target-detection loss")
-    if epochs < 1 or validate_every < 1:
-        raise ValueError("epochs and validate_every must both be positive")
+    if epochs < 1 or validate_every < 1 or snapshot_every < 1:
+        raise ValueError("epochs, validate_every, and snapshot_every must be positive")
+    if snapshot_dir is not None:
+        Path(snapshot_dir).mkdir(parents=True, exist_ok=True)
     if success_threshold is None:
         success_threshold = config.SEARCH["success_threshold"]
 
@@ -170,6 +175,13 @@ def run_gradient_descent(
                 f"{type(scene).__name__} did not produce a finite "
                 f"{property_name.lower()} gradient at step {step}"
             )
+        loss_value = loss.detach().item()
+        # The next Mitsuba/Dr.Jit render needs CUDA memory from a separate
+        # allocator. Drop Torch's references to this step's graph before it
+        # starts, then return cached freed blocks so Dr.Jit can reuse them.
+        del differentiable_image, loss
+        if classifier.device.type == "cuda":
+            torch.cuda.empty_cache()
         optimizer.step()
 
         with torch.no_grad():
@@ -201,12 +213,15 @@ def run_gradient_descent(
                             if key in state:
                                 state[key].zero_()
 
-        if step % validate_every != 0 and step != epochs:
+        should_snapshot = snapshot_dir is not None and step % snapshot_every == 0
+        if step % validate_every != 0 and step != epochs and not should_snapshot:
             continue
 
         image = scene.render()
         if image is None:
             continue
+        if should_snapshot:
+            save_image(image, str(Path(snapshot_dir) / f"step_{step:05d}.png"))
         result = classifier.classify(image)
         target_prob = result[score_key]
         current_value = _get_property(scene, property_name)
@@ -218,7 +233,7 @@ def run_gradient_descent(
 
         if verbose:
             print(
-                f"{step:4d} {loss.item():10.4f} {target_prob * 100:9.2f}% "
+                f"{step:4d} {loss_value:10.4f} {target_prob * 100:9.2f}% "
                 f"{_format_property(property_name, current_value)}"
             )
         if best_prob <= success_threshold:
