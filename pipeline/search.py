@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -81,6 +82,7 @@ def run_gradient_descent(
     verbose: bool = True,
     snapshot_dir: Optional[str] = None,
     snapshot_every: int = 10,
+    metrics_csv: Optional[str] = None,
 ) -> SearchResult:
     """Use renderer gradients and Adam to minimize the target-class score."""
 
@@ -99,6 +101,13 @@ def run_gradient_descent(
         raise ValueError("epochs, validate_every, and snapshot_every must be positive")
     if snapshot_dir is not None:
         Path(snapshot_dir).mkdir(parents=True, exist_ok=True)
+    if metrics_csv is not None:
+        metrics_path = Path(metrics_csv)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        with metrics_path.open("w", newline="", encoding="utf-8") as csv_file:
+            csv.writer(csv_file).writerow(
+                ("step", "parameter", "probability_percent", "snapshot_name")
+            )
     if success_threshold is None:
         success_threshold = config.SEARCH["success_threshold"]
 
@@ -132,6 +141,20 @@ def run_gradient_descent(
     best_img = initial_img.copy()
     best_step = 0
     best_value = _get_property(scene, property_name)
+    initial_snapshot_name = ""
+    if snapshot_dir is not None:
+        initial_snapshot_name = "step_00000.png"
+        save_image(initial_img, str(Path(snapshot_dir) / initial_snapshot_name))
+    if metrics_csv is not None:
+        with Path(metrics_csv).open("a", newline="", encoding="utf-8") as csv_file:
+            csv.writer(csv_file).writerow(
+                (
+                    0,
+                    _format_property(property_name, best_value),
+                    best_prob * 100.0,
+                    initial_snapshot_name,
+                )
+            )
 
     if verbose:
         print(f"Initial {target_name}_prob = {best_prob * 100:.2f}%")
@@ -225,6 +248,17 @@ def run_gradient_descent(
         result = classifier.classify(image)
         target_prob = result[score_key]
         current_value = _get_property(scene, property_name)
+        if should_snapshot and metrics_csv is not None:
+            snapshot_name = f"step_{step:05d}.png"
+            with Path(metrics_csv).open("a", newline="", encoding="utf-8") as csv_file:
+                csv.writer(csv_file).writerow(
+                    (
+                        step,
+                        _format_property(property_name, current_value),
+                        target_prob * 100.0,
+                        snapshot_name,
+                    )
+                )
         if target_prob < best_prob:
             best_prob = target_prob
             best_step = step

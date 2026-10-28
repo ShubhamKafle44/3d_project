@@ -113,11 +113,15 @@ To run a 10-by-10 grid of epoch and learning-rate settings sequentially:
 bash run_sweep.sh
 ```
 
-The sweep script's `EPOCHS` and `LEARNING_RATES` arrays define the 100
-combinations. It writes one log per run and a `summary.csv` under
-`outputs/sweeps/`. Each run is a separate Python process, so its CUDA and
-Dr.Jit allocations are released before the next run starts. The sweep
-continues after a failed run and records its exit status.
+The sweep script starts in the background, so it keeps running after the
+terminal closes. Its `EPOCHS` and `LEARNING_RATES` arrays define the 100
+combinations. Each combination gets a separate output folder containing a
+`metrics.csv` and a `snapshots/` directory. The CSV records step, parameter,
+probability percentage, and snapshot filename; snapshots include the initial
+render and an image every 10 gradient steps. Sweep logs and an overall
+`summary.csv` are saved under `outputs/sweeps/`. Each run is a separate Python
+process, releasing its CUDA and Dr.Jit allocations before the next run starts.
+The sweep continues after a failed run and records its exit status.
 
 ## Output
 

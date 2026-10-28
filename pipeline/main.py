@@ -160,6 +160,7 @@ def main():
         success_threshold=success_threshold,
         snapshot_dir=str(out_dir / "snapshots"),
         snapshot_every=10,
+        metrics_csv=str(out_dir / "metrics.csv"),
     )
 
 
