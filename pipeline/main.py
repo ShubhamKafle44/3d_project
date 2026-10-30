@@ -66,6 +66,8 @@ def main():
 
     detector_name = "fasterrcnn_resnet50_fpn_v2"
     detector_target = "person"
+
+
     success_threshold = config.SEARCH["success_threshold"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     scene_image_size = config.SEARCH["gradient_image_size"]
