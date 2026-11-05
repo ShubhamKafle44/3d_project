@@ -12,7 +12,7 @@ BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
-MITSUBA_SPP = 4
+MITSUBA_SPP = 1
 
 # Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
 MITSUBA_VARIANT = "cuda_ad_rgb"
@@ -70,4 +70,4 @@ PROPERTY_BOUNDS = {
 
 POSITION_COLLISION_CLEARANCE = 0.03
 
-POSITION_FRAME_MARGIN_PX = 32
+POSITION_FRAME_MARGIN_PX = 1

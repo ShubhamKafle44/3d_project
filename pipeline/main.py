@@ -107,7 +107,6 @@ def main():
     print(f"Property : {property}")
     print(f"Learning rate: {learning_rate:g}")
     print("Search mode: gradient")
-    print(f"Device   : {device}")
     print("=" * 60)
 
 
@@ -126,7 +125,6 @@ def main():
     classifier = ObjectDetectionClassifier(
         model_name= detector_name,
         target_class=detector_target,
-        device=device,
     )
 
 
