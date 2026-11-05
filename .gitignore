@@ -36,5 +36,6 @@ Thumbs.db
 #generated image
 
 generated_image/
+/pipeline/outputs/*
 /pipeline/outputs/search-*.log
 /pipeline/outputs/search-*.pid

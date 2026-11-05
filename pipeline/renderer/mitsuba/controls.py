@@ -13,15 +13,39 @@ from ..collision import boxes_overlap_any
 class SceneControlsMixin:
     # ---- position / rotation ----------------------------------------
     def set_position(self, x: float, y: float, z: float) -> None:
-        """Set the subject position when it remains visible and collision-free."""
+        """Set position while preserving the active Torch parameter."""
         candidate = np.array([x, y, z], dtype=np.float32)
         if not self.is_position_valid(candidate):
-            return
+            # IF THE MODEL IS OUT
+            current = self.get_position()
+
+            # Find a valid position between the current and proposed positions.
+            low = 0.0
+            high = 1.0
+
+            for _ in range(20):
+                mid = (low + high) / 2.0
+
+                test_position = current + mid * (candidate - current)
+
+                if self.is_position_valid(test_position):
+                    low = mid
+                else:
+                    high = mid
+
+            candidate = current + low * (candidate - current)
+
         self.pos = candidate
+
         if getattr(self, "position_parameter", None) is not None:
             with torch.no_grad():
-                self.position_parameter.copy_(torch.as_tensor(self.pos))
-            self.position_parameter.grad = None
+                self.position_parameter.copy_(
+                    torch.as_tensor(
+                        candidate,
+                        dtype=self.position_parameter.dtype,
+                        device=self.position_parameter.device
+                    )
+                )
 
     def get_position(self) -> np.ndarray:
         """Return the current position, including any active Torch parameter."""

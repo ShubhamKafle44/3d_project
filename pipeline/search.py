@@ -228,13 +228,50 @@ def run_gradient_descent(
             # Reject updates that move any part of the subject out of view or
             # intersect the environment. The renderers read these live leaves.
             with torch.no_grad():
-                if not scene.is_position_valid(scene.get_position()):
-                    for parameter, previous_value in zip(optimized_parameters, previous_values):
-                        parameter.copy_(previous_value)
-                    for state in optimizer.state.values():
-                        for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq"):
-                            if key in state:
-                                state[key].zero_()
+                if property_name == "POSITION":
+                    position_parameter = parameters[0]
+
+                    old_position = previous_values[0]
+                    new_position = position_parameter.detach().clone()
+
+                    if not scene.is_position_valid(new_position.cpu().numpy()):
+
+                        low = 0.0
+                        high = 1.0
+
+                        for _ in range(25):
+
+                            mid = (low + high) / 2.0
+
+                            test_position = (
+                                old_position + mid * (new_position - old_position)
+                            )
+
+                            with torch.no_grad():
+                                position_parameter.copy_(test_position)
+
+                            if scene.is_position_valid(
+                                position_parameter.detach().cpu().numpy()
+                            ):
+                                low = mid
+                            else:
+                                high = mid
+
+                        with torch.no_grad():
+                            position_parameter.copy_(
+                                old_position + low * (new_position - old_position)
+                            )
+
+                elif property_name in ("POSE", "ROTATION"):
+
+                    with torch.no_grad():
+
+                        if not scene.is_position_valid(scene.get_position()):
+
+                            for parameter, previous_value in zip(
+                                optimized_parameters, previous_values
+                            ):
+                                parameter.copy_(previous_value)
 
         should_snapshot = snapshot_dir is not None and step % snapshot_every == 0
         if step % validate_every != 0 and step != epochs and not should_snapshot:

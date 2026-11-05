@@ -1,4 +1,3 @@
-
 HUMAN_PARTS = {
     "body": "assets/3D_MODELS/human/body.obj",
     "shirt": "assets/3D_MODELS/human/shirt.obj",
