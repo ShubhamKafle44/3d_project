@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-FOLDER_NAME = "20261105_141925_266808_e100_lr1_human_studio"
+FOLDER_NAME = "20261105_152514_981920_e100_lr1_human_studio"
 
 
 

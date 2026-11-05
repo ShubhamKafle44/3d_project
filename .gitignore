@@ -33,6 +33,11 @@ output.png
 *.jpg
 *.jpeg
 
+
+# Keep image assets used by OBJ/MTL materials in version control.
+!pipeline/assets/**/*.jpg
+!pipeline/assets/**/*.jpeg
+
 # Operating System files
 .DS_Store
 Thumbs.db
