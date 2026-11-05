@@ -4,6 +4,8 @@ torchvision>=0.16
 numpy
 Pillow
 openpyxl
+paramiko>=3.4
+python-dotenv>=1.0
 
 # Mitsuba backend (installable via pip, CPU-ready out of the box)
 mitsuba>=3.5

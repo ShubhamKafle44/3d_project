@@ -130,6 +130,29 @@ The sweep continues after a failed run and records its exit status.
 - `outputs/<timestamp>_e<epochs>_lr<rate>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
 - Console log shows the selected target-class probability at every step and the final result
 
+## Download a run from another server
+
+Copy `.env.example` to `.env` in the repository root and set the SSH server
+address, username, and password there. `.env` is ignored by Git, so do not
+commit it. Install the added downloader dependencies with
+`python -m pip install -r pipeline/requirements.txt`.
+
+Download a complete remote output folder, including nested directories and
+hidden files:
+
+```bash
+python pipeline/download_remote.py \
+  --remote-folder '~/3d_project/pipeline/outputs/your_run_folder' \
+  --epochs 1000 \
+  --learning-rate 0.01
+```
+
+The folder is saved under `downloads/` in the repository root by default.
+`--epochs` and `--learning-rate` add labels to the local folder name; they do
+not filter remote files. Set `--local-dir` to choose another destination.
+The SSH server key must already be trusted in `~/.ssh/known_hosts`; connect
+once with `ssh username@host` and verify the key before running the downloader.
+
 ## Notes
 
 - Gradient search minimizes a differentiable surrogate for the selected COCO

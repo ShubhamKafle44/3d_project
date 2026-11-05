@@ -3,7 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Environments (Specific to your setup)
+# Environments 
+
+.env
+.env.*
+!.env.example
 pytorch3d_env/
 venv/
 .venv/
@@ -36,6 +40,7 @@ Thumbs.db
 #generated image
 
 generated_image/
+downloads/
 /pipeline/outputs/*
 /pipeline/outputs/search-*.log
 /pipeline/outputs/search-*.pid
