@@ -58,6 +58,7 @@ SEARCH = {
     "success_threshold": 0.05,      
     "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
+    "gradient_snapshot_every": 10,
     "gradient_image_size": 1024,
     "gradient_detector_size": 384,
 }

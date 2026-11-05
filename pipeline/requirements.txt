@@ -3,6 +3,7 @@ torch>=2.1
 torchvision>=0.16
 numpy
 Pillow
+openpyxl
 
 # Mitsuba backend (installable via pip, CPU-ready out of the box)
 mitsuba>=3.5

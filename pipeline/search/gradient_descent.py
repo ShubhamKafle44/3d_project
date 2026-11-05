@@ -6,7 +6,10 @@ import torch
 
 import config
 from renderer import DifferentiableScene
-from .artifacts import append_metrics_row, initialize_metrics_file, save_image
+from .artifacts import (
+    append_metrics_row, append_optimization_record, create_optimization_workbook,
+    initialize_metrics_file, save_image,
+)
 from .constraints import enforce_scene_constraints
 from .optimization import apply_parameter_bounds, take_gradient_step
 from .properties import format_property, get_property, set_property
@@ -27,11 +30,11 @@ def _prepare_output(snapshot_dir: Optional[str], metrics_csv: Optional[str]) -> 
 
 def _save_initial_observation(
     image, property_name: str, value, probability: float,
-    snapshot_dir: Optional[str], metrics_csv: Optional[str],
+    snapshot_dir: Optional[str], metrics_csv: Optional[str], snapshot_prefix: str,
 ) -> str:
     snapshot_name = ""
     if snapshot_dir is not None:
-        snapshot_name = "step_00000.png"
+        snapshot_name = f"{snapshot_prefix}_step_00000.png" if snapshot_prefix else "step_00000.png"
         save_image(image, str(Path(snapshot_dir) / snapshot_name))
     append_metrics_row(
         metrics_csv, 0, format_property(property_name, value), probability, snapshot_name
@@ -60,6 +63,7 @@ def run_gradient_descent(
     snapshot_dir: Optional[str] = None,
     snapshot_every: int = 10,
     metrics_csv: Optional[str] = None,
+    snapshot_prefix: str = "",
 ) -> SearchResult:
     """Use renderer gradients and Adam to minimize the target-class score."""
     if not hasattr(scene, "differentiable_parameters"):
@@ -74,6 +78,7 @@ def run_gradient_descent(
         raise ValueError("epochs, validate_every, and snapshot_every must be positive")
 
     _prepare_output(snapshot_dir, metrics_csv)
+    optimization_workbook = create_optimization_workbook(metrics_csv)
     if success_threshold is None:
         success_threshold = config.SEARCH["success_threshold"]
 
@@ -103,8 +108,14 @@ def run_gradient_descent(
     best_img = initial_img.copy()
     best_step = 0
     best_value = get_property(scene, property_name)
+    append_optimization_record(
+        optimization_workbook, step=0, property_name=property_name,
+        loss=None, validation_probability=best_prob, position=scene.get_position(),
+        parameters=parameters, gradients=[], optimizer=None,
+    )
     _save_initial_observation(
-        initial_img, property_name, best_value, best_prob, snapshot_dir, metrics_csv
+        initial_img, property_name, best_value, best_prob,
+        snapshot_dir, metrics_csv, snapshot_prefix,
     )
 
     if verbose:
@@ -143,19 +154,42 @@ def run_gradient_descent(
         )
 
         should_snapshot = snapshot_dir is not None and step % snapshot_every == 0
-        if step % validate_every != 0 and step != epochs and not should_snapshot:
+        should_validate = step % validate_every == 0 or step == epochs or should_snapshot
+        if not should_validate:
+            append_optimization_record(
+                optimization_workbook, step=step, property_name=property_name,
+                loss=loss_value, validation_probability=None,
+                position=scene.get_position(), parameters=parameters,
+                gradients=[parameter.grad for parameter in optimized_parameters],
+                optimizer=optimizer,
+            )
             continue
 
         image = scene.render()
         if image is None:
+            append_optimization_record(
+                optimization_workbook, step=step, property_name=property_name,
+                loss=loss_value, validation_probability=None,
+                position=scene.get_position(), parameters=parameters,
+                gradients=[parameter.grad for parameter in optimized_parameters],
+                optimizer=optimizer,
+            )
             continue
         snapshot_name = ""
         if should_snapshot:
-            snapshot_name = f"step_{step:05d}.png"
+            step_name = f"step_{step:05d}.png"
+            snapshot_name = f"{snapshot_prefix}_{step_name}" if snapshot_prefix else step_name
             save_image(image, str(Path(snapshot_dir) / snapshot_name))
         result = classifier.classify(image)
         target_prob = result[score_key]
         current_value = get_property(scene, property_name)
+        append_optimization_record(
+            optimization_workbook, step=step, property_name=property_name,
+            loss=loss_value, validation_probability=target_prob,
+            position=scene.get_position(), parameters=parameters,
+            gradients=[parameter.grad for parameter in optimized_parameters],
+            optimizer=optimizer, snapshot_name=snapshot_name,
+        )
         if should_snapshot:
             append_metrics_row(
                 metrics_csv, step, format_property(property_name, current_value),

@@ -72,8 +72,6 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     scene_image_size = config.SEARCH["gradient_image_size"]
 
-
-
     if renderer not in {"pytorch3d", "mitsuba"}:
         raise ValueError("renderer must be 'pytorch3d' or 'mitsuba'")
     if property not in PROPERTIES:
@@ -159,8 +157,9 @@ def main():
         detector_input_size=config.SEARCH["gradient_detector_size"],
         success_threshold=success_threshold,
         snapshot_dir=str(out_dir / "snapshots"),
-        snapshot_every=10,
+        snapshot_every=config.SEARCH["gradient_snapshot_every"],
         metrics_csv=str(out_dir / "metrics.csv"),
+        snapshot_prefix=f"e{epochs}_lr{learning_rate:g}_{run_name}",
     )
 
 
