@@ -90,7 +90,7 @@ def main():
     run_name = f"{_safe_name(model)}_{_safe_name(environment)}" 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     learning_rate_label = f"{learning_rate:g}".replace(".", "p")
-    out_dir = output_root / f"{timestamp}_e{epochs}_lr{learning_rate_label}_{run_name}"
+    out_dir = output_root / f"{timestamp}_{property}_e{epochs}_lr{learning_rate_label}_{run_name}"
     out_dir.mkdir()
 
 
