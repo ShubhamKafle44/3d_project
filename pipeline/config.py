@@ -27,7 +27,7 @@ CAMERA = {
 
 LIGHT = {
     "intensity": 30.0,
-    "position": (-2.0, 4.2, -19.07),
+    "position": (-2.0, 4.2, 5.0),
     "color": (1.0, 0.72, 0.38),
 }
 
@@ -59,15 +59,18 @@ SEARCH = {
     "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
     "gradient_snapshot_every": 10,
-    "gradient_image_size": 1024,
+    "gradient_image_size": 4096,
     "gradient_detector_size": 384,
 }
 
 PROPERTY_BOUNDS = {
     "ROTATION": (0.0, 360.0),
-    "LIGHTING": (0.05, 3.0),
+    "LIGHTING": (0.5, 3.0),
     "CLOTHING": (0.0, 1.0),
 }
+
+# Keep optimized point-light positions in a useful region around the subject.
+LIGHT_POSITION_BOUNDS = ((-8.0, 8.0), (0.5, 10.0), (-8.0, 8.0))
 
 POSITION_COLLISION_CLEARANCE = 0.03
 
