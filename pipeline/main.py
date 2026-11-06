@@ -105,6 +105,7 @@ def main():
     print(f"Property : {property}")
     print(f"Learning rate: {learning_rate:g}")
     print("Search mode: gradient")
+    print(f"Folder: {out_dir.name}")
     print("=" * 60)
 
 
