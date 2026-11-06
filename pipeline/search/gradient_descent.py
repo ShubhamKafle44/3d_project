@@ -108,6 +108,9 @@ def run_gradient_descent(
     best_img = initial_img.copy()
     best_step = 0
     best_value = get_property(scene, property_name)
+    best_light_position = (
+        parameters[4].detach().clone() if property_name == "LIGHTING" else None
+    )
     append_optimization_record(
         optimization_workbook, step=0, property_name=property_name,
         loss=None, validation_probability=best_prob, position=scene.get_position(),
@@ -119,7 +122,16 @@ def run_gradient_descent(
     )
 
     if verbose:
-        print(f"Initial {target_name}_prob = {best_prob * 100:.2f}%")
+        initial_line = f"Initial {target_name}_prob = {best_prob * 100:.2f}%"
+        if property_name == "LIGHTING":
+            light_position = parameters[4].detach().cpu().numpy()
+            initial_line += (
+                " lighting=" + format_property(property_name, best_value)
+                + " light_position=("
+                + f"{light_position[0]:+.3f}, {light_position[1]:+.3f}, "
+                + f"{light_position[2]:+.3f})"
+            )
+        print(initial_line)
         print(f"{'Step':>4} {'Loss':>10} {target_name + 'Prob':>10} Parameters")
         print("-" * 88)
     result = _initial_result(
@@ -132,13 +144,18 @@ def run_gradient_descent(
         "POSITION": (0,),
         "ROTATION": (1,),
         "POSE": (0, 1),
-        "LIGHTING": (2,),
+        "LIGHTING": (2, 4),
         "CLOTHING": (3,),
     }[property_name]
     optimized_parameters = [parameters[index] for index in parameter_indices]
     for model_parameter in classifier.model.parameters():
         model_parameter.requires_grad_(False)
-    optimizer = torch.optim.Adam(optimized_parameters, lr=learning_rate)
+
+    # Keep each lighting update small enough to search the useful range.
+    optimizer_learning_rate = min(learning_rate, 0.05) if property_name == "LIGHTING" else learning_rate
+
+    
+    optimizer = torch.optim.Adam(optimized_parameters, lr=optimizer_learning_rate)
     exploration_rng = np.random.default_rng()
 
     for step in range(1, epochs + 1):
@@ -200,16 +217,30 @@ def run_gradient_descent(
             best_step = step
             best_img = image.copy()
             best_value = current_value
+            if property_name == "LIGHTING":
+                best_light_position = parameters[4].detach().clone()
 
         if verbose:
+            parameter_text = format_property(property_name, current_value)
+            if property_name == "LIGHTING":
+                light_position = parameters[4].detach().cpu().numpy()
+                parameter_text += (
+                    " light_position=("
+                    f"{light_position[0]:+.3f}, {light_position[1]:+.3f}, "
+                    f"{light_position[2]:+.3f})"
+                )
             print(
                 f"{step:4d} {loss_value:10.4f} {target_prob * 100:9.2f}% "
-                f"{format_property(property_name, current_value)}"
+                f"{parameter_text}"
             )
         if best_prob <= success_threshold:
             break
 
     set_property(scene, property_name, best_value)
+    if property_name == "LIGHTING":
+        with torch.no_grad():
+            parameters[4].copy_(best_light_position)
+        scene.light_position = best_light_position.detach().cpu().numpy().astype(np.float32)
     return SearchResult(
         best_prob <= success_threshold, best_step, best_prob, best_img, best_value
     )

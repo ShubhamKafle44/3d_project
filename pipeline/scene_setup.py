@@ -141,12 +141,10 @@ def build_scene_layout(
     scene.set_camera_orbit(**_camera_for_model(parts, model in (None, "human")))
 
 
-    #PYTORCH3D uses DEFAULT AMBIENT LIGHT SO TO AVOID ADDITIONAL LIGHTING WE USE LIGHTING JUST FOR MITSUBA
-    light_intensity = (
-        config.AMBIENT_LIGHT["intensity"]
-        if backend == "mitsuba"
-            else config.LIGHT["intensity"]
-    )
+    # Mitsuba's lighting control is a multiplier for its direct point light,
+    # not the ambient-light intensity. Start at the neutral multiplier so the
+    # initial lighting parameter is above its optimization lower bound.
+    light_intensity = 1.0 if backend == "mitsuba" else config.LIGHT["intensity"]
     scene.set_lighting(light_intensity)
 
     return scene

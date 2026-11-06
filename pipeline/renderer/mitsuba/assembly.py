@@ -35,6 +35,7 @@ class SceneAssemblyMixin:
     def _build_scene_dict(self, differentiable: bool = False) -> dict:
         """Assemble Mitsuba's scene description from camera, lights, and meshes."""
         origin = self._camera_origin()
+        lighting_only = self._active_differentiable_property == "LIGHTING"
 
         scene_dict = {
             "type": "scene",
@@ -59,6 +60,7 @@ class SceneAssemblyMixin:
                 "radiance": {
                     "type": "rgb",
                     "value": [
+                        0.0 if lighting_only else
                         math.pi * float(config.AMBIENT_LIGHT["intensity"]) * float(component)
                         for component in config.AMBIENT_LIGHT["color"]
                     ],
@@ -66,16 +68,22 @@ class SceneAssemblyMixin:
             },
             "street_light": {
                 "type": "point",
-                "position": list(config.LIGHT["position"]),
+                "position": self.light_position.tolist(),
                 "intensity": {
                     "type": "rgb",
                     "value": [
-                        20.0 * self.ambient_intensity * float(channel)
+                        20.0 * self.key_light_intensity * float(channel)
                         for channel in self.light_color
                     ],
                 },
             },
-            "fill_light": {
+        }
+
+        # Lighting search isolates the optimized key point light. Keep the
+        # fill light for all other properties, where it remains part of the
+        # fixed scene illumination.
+        if not lighting_only:
+            scene_dict["fill_light"] = {
                 "type": "point",
                 "position": list(config.FILL_LIGHT["position"]),
                 "intensity": {
@@ -85,8 +93,7 @@ class SceneAssemblyMixin:
                         for channel in config.FILL_LIGHT["color"]
                     ],
                 },
-            },
-        }
+            }
 
         to_world = (
             mi.ScalarTransform4f()

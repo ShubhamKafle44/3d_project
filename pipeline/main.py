@@ -57,7 +57,7 @@ def main():
     renderer = "mitsuba"
 
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING"
-    property = "POSITION"
+    property = "POSE"
 
     #DEFINE MODELS
     model = "human"

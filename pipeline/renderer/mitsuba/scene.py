@@ -48,10 +48,12 @@ class MitsubaScene(
         self.position_parameter = None
         self.rotation_parameter = None
         self.lighting_parameter = None
+        self.light_position_parameter = None
         self.shirt_color_parameter = None
         self._shirt_color_override = None
         self._active_differentiable_property = None
-        self.ambient_intensity = 1.0
+        self.key_light_intensity = 1.0
+        self.light_position = np.asarray(config.LIGHT["position"], dtype=np.float32)
         self.light_color = config.LIGHT.get("color", (1.0, 1.0, 1.0))
 
         self._cam_distance = 3.0

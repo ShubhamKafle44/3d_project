@@ -16,13 +16,14 @@ class _MitsubaTorchRender(torch.autograd.Function):
     """Bridge Torch cotangents to the Dr.Jit graph retained by mi.render."""
 
     @staticmethod
-    def forward(ctx, scene, position, rotation, lighting, shirt_color):
+    def forward(ctx, scene, position, rotation, lighting, shirt_color, light_position):
         """Render the scene and retain Dr.Jit parameters for the backward pass."""
 
         # We need to convert the pytorchTensor values to numpy Arrays
         pos = position.detach().cpu().numpy().astype(np.float32)
         rot_deg = rotation.detach().cpu().numpy().astype(np.float32)
         intensity = float(lighting.detach().cpu())
+        light_pos = light_position.detach().cpu().numpy().astype(np.float32)
 
 
         scene_dict = scene._build_scene_dict(differentiable=True)
@@ -44,6 +45,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
         scene_dict["street_light"]["intensity"]["value"] = [
             20.0 * intensity * float(channel) for channel in scene.light_color
         ]
+        scene_dict["street_light"]["position"] = light_pos.tolist()
 
         #Change the textures
         if shirt_color is not None:
@@ -80,6 +82,8 @@ class _MitsubaTorchRender(torch.autograd.Function):
         #CALCULATE GRADIENTS FOR LIGHT INTENSITY
         light_key = "street_light.intensity.value"
         dr.enable_grad(params[light_key])
+        light_position_key = "street_light.position"
+        dr.enable_grad(params[light_position_key])
 
         #CALCULATE GRADIENTS FOR TEXTURES
         shirt_keys = []
@@ -111,6 +115,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ctx.params = params
         ctx.vertex_keys = vertex_keys
         ctx.light_key = light_key
+        ctx.light_position_key = light_position_key
         ctx.light_rgb = np.asarray(scene.light_color, dtype=np.float32)
         ctx.shirt_keys = shirt_keys
         ctx.has_shirt_color = shirt_color is not None
@@ -161,6 +166,9 @@ class _MitsubaTorchRender(torch.autograd.Function):
         radiance_grad = radiance_grad.sum(axis=0)
         scale = 20.0 * ctx.light_rgb
         lighting_grad = float(np.dot(radiance_grad, scale))
+        light_position_grad = np.array(
+            dr.grad(ctx.params[ctx.light_position_key]), copy=False
+        ).reshape(3)
     
 
         shirt_grad = np.zeros(3, dtype=np.float32)
@@ -198,6 +206,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
                 if ctx.has_shirt_color
                 else None
             ),
+            torch_from_numpy(light_position_grad).to(grad_output.device),
         )
 
 

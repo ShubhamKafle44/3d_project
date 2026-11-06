@@ -130,7 +130,7 @@ class SceneControlsMixin:
     # ---- lighting -----------------------------------------------------
     def set_lighting(self, intensity: float) -> None:
         """Set the key-light intensity and sync any active Torch parameter."""
-        self.ambient_intensity = float(intensity)
+        self.key_light_intensity = float(intensity)
         if getattr(self, "lighting_parameter", None) is not None:
             with torch.no_grad():
                 self.lighting_parameter.fill_(float(intensity))
@@ -140,7 +140,7 @@ class SceneControlsMixin:
         """Return the current key-light intensity."""
         if getattr(self, "lighting_parameter", None) is not None:
             return float(self.lighting_parameter.detach().cpu())
-        return self.ambient_intensity
+        return self.key_light_intensity
 
     # ---- material -------------------------------------------------------
     def set_material_color(self, part_name: str, rgb: Tuple[float, float, float]) -> None:

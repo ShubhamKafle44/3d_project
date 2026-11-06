@@ -21,7 +21,8 @@ class SceneRenderingMixin:
             if getattr(self, "position_parameter", None) is not None:
                 self.pos = self.position_parameter.detach().cpu().numpy().astype(np.float32)
                 self.rot_deg = self.rotation_parameter.detach().cpu().numpy().astype(np.float32)
-                self.ambient_intensity = float(self.lighting_parameter.detach().cpu())
+                self.key_light_intensity = float(self.lighting_parameter.detach().cpu())
+                self.light_position = self.light_position_parameter.detach().cpu().numpy().astype(np.float32)
                 if self._active_differentiable_property == "CLOTHING":
                     self._shirt_color_override = tuple(
                         self.shirt_color_parameter.detach().cpu().numpy().tolist()
@@ -53,7 +54,11 @@ class SceneRenderingMixin:
             )
         if getattr(self, "lighting_parameter", None) is None:
             self.lighting_parameter = torch.tensor(
-                self.ambient_intensity, dtype=torch.float32, requires_grad=True
+                self.key_light_intensity, dtype=torch.float32, requires_grad=True
+            )
+        if getattr(self, "light_position_parameter", None) is None:
+            self.light_position_parameter = torch.tensor(
+                self.light_position.copy(), dtype=torch.float32, requires_grad=True
             )
         if getattr(self, "rotation_parameter", None) is None:
             self.rotation_parameter = torch.tensor(
@@ -75,7 +80,7 @@ class SceneRenderingMixin:
             )
         image = _MitsubaTorchRender.apply(
             self, self.position_parameter, self.rotation_parameter,
-            self.lighting_parameter, shirt_color,
+            self.lighting_parameter, shirt_color, self.light_position_parameter,
         )
         return linear_to_srgb(image) if srgb_output() else image
 
@@ -91,7 +96,11 @@ class SceneRenderingMixin:
             )
         if getattr(self, "lighting_parameter", None) is None:
             self.lighting_parameter = torch.tensor(
-                self.ambient_intensity, dtype=torch.float32, requires_grad=True
+                self.key_light_intensity, dtype=torch.float32, requires_grad=True
+            )
+        if getattr(self, "light_position_parameter", None) is None:
+            self.light_position_parameter = torch.tensor(
+                self.light_position.copy(), dtype=torch.float32, requires_grad=True
             )
         if getattr(self, "shirt_color_parameter", None) is None:
             self.shirt_color_parameter = torch.tensor(
@@ -104,4 +113,5 @@ class SceneRenderingMixin:
             self.rotation_parameter,
             self.lighting_parameter,
             self.shirt_color_parameter,
+            self.light_position_parameter,
         )
