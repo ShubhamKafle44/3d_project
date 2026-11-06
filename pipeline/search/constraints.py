@@ -11,7 +11,7 @@ def enforce_scene_constraints(
         return
 
     with torch.no_grad():
-        if property_name == "POSITION":
+        if property_name in ("POSITION", "POSE"):
             position_parameter = parameters[0]
             old_position = previous_values[0]
             new_position = position_parameter.detach().clone()
