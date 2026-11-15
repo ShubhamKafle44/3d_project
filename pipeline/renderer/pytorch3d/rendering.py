@@ -45,9 +45,9 @@ class SceneRenderingMixin:
 
             m = mesh.clone()
             m = m.update_padded(verts.unsqueeze(0))
-            if name == "shirt" and self._active_differentiable_property == "CLOTHING":
+            if name == "shirt" and self._active_differentiable_property == "TEXTURE":
                 if self.shirt_color_parameter is None:
-                    raise RuntimeError("Initialize differentiable parameters before clothing rendering")
+                    raise RuntimeError("Initialize differentiable parameters before texture rendering")
                 vertex_count = m.verts_packed().shape[0]
                 colors = self.shirt_color_parameter.view(1, 1, 3).expand(1, vertex_count, 3)
                 m.textures = TexturesVertex(verts_features=colors)

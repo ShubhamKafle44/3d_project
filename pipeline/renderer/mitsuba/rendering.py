@@ -23,10 +23,8 @@ class SceneRenderingMixin:
                 self.rot_deg = self.rotation_parameter.detach().cpu().numpy().astype(np.float32)
                 self.key_light_intensity = float(self.lighting_parameter.detach().cpu())
                 self.light_position = self.light_position_parameter.detach().cpu().numpy().astype(np.float32)
-                if self._active_differentiable_property == "CLOTHING":
-                    self._shirt_color_override = tuple(
-                        self.shirt_color_parameter.detach().cpu().numpy().tolist()
-                    )
+                if self._active_differentiable_property == "TEXTURE":
+                    self._texture_image_override = self.texture_image_parameter.detach().cpu().numpy().copy()
             scene_dict = self._build_scene_dict()
             scene = mi.load_dict(scene_dict)
             image = mi.render(scene, spp=self._spp)
@@ -64,23 +62,19 @@ class SceneRenderingMixin:
             self.rotation_parameter = torch.tensor(
                 self.rot_deg.copy(), dtype=torch.float32, requires_grad=True
             )
-        if getattr(self, "shirt_color_parameter", None) is None:
-            self.shirt_color_parameter = torch.tensor(
-                self.get_material_color("shirt").astype(np.float32),
-                dtype=torch.float32,
-                requires_grad=True,
-            )
-        shirt_color = None
-        if self._active_differentiable_property == "CLOTHING":
-            if not self._part_shapes.get("shirt"):
-                raise ValueError("CLOTHING optimization requires a model part named 'shirt'")
-            shirt_color = self.shirt_color_parameter
-            self._shirt_color_override = tuple(
-                shirt_color.detach().cpu().numpy().tolist()
-            )
+        texture_image = None
+        if self._active_differentiable_property == "TEXTURE":
+            if self.texture_attack_target is None:
+                self.set_texture_attack_target()
+            if self.texture_image_parameter is None:
+                self.texture_image_parameter = torch.tensor(
+                    self.load_texture_attack_image(), dtype=torch.float32, requires_grad=True
+                )
+            texture_image = self.texture_image_parameter
+            self._texture_image_override = texture_image.detach().cpu().numpy().copy()
         image = _MitsubaTorchRender.apply(
             self, self.position_parameter, self.rotation_parameter,
-            self.lighting_parameter, shirt_color, self.light_position_parameter,
+            self.lighting_parameter, texture_image, self.light_position_parameter,
         )
         return linear_to_srgb(image) if srgb_output() else image
 
@@ -102,16 +96,30 @@ class SceneRenderingMixin:
             self.light_position_parameter = torch.tensor(
                 self.light_position.copy(), dtype=torch.float32, requires_grad=True
             )
-        if getattr(self, "shirt_color_parameter", None) is None:
-            self.shirt_color_parameter = torch.tensor(
-                self.get_material_color("shirt").astype(np.float32),
+        texture_parameter = self.texture_color_parameter
+        if self._active_differentiable_property == "TEXTURE":
+            if self.texture_attack_target is None:
+                self.set_texture_attack_target()
+            if self.texture_image_parameter is None:
+                self.texture_image_parameter = torch.tensor(
+                    self.load_texture_attack_image(), dtype=torch.float32, requires_grad=True
+                )
+            texture_parameter = self.texture_image_parameter
+        elif getattr(self, "texture_color_parameter", None) is None:
+            color_target = (
+                "shirt" if "shirt" in self._part_shapes
+                else next(iter(self._part_shapes), None)
+            )
+            self.texture_color_parameter = torch.tensor(
+                self.get_material_color(color_target).astype(np.float32),
                 dtype=torch.float32,
                 requires_grad=True,
             )
+            texture_parameter = self.texture_color_parameter
         return (
             self.position_parameter,
             self.rotation_parameter,
             self.lighting_parameter,
-            self.shirt_color_parameter,
+            texture_parameter,
             self.light_position_parameter,
         )

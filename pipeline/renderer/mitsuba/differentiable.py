@@ -16,7 +16,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
     """Bridge Torch cotangents to the Dr.Jit graph retained by mi.render."""
 
     @staticmethod
-    def forward(ctx, scene, position, rotation, lighting, shirt_color, light_position):
+    def forward(ctx, scene, position, rotation, lighting, texture_image, light_position):
         """Render the scene and retain Dr.Jit parameters for the backward pass."""
 
         # We need to convert the pytorchTensor values to numpy Arrays
@@ -47,16 +47,14 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ]
         scene_dict["street_light"]["position"] = light_pos.tolist()
 
-        #Change the textures
-        if shirt_color is not None:
-            color = shirt_color.detach().cpu().numpy().astype(np.float32).tolist()
-            for key, _, _ in scene._part_shapes.get("shirt", []):
-                # The attack uses a uniform differentiable diffuse color for
-                # the shirt while preserving the shape and lighting graph.
-                scene_dict[key]["bsdf"] = {
-                    "type": "diffuse",
-                    "reflectance": {"type": "rgb", "value": color},
-                }
+        # Replace only the selected material's bitmap with differentiable data.
+        if texture_image is not None:
+            image_np = texture_image.detach().cpu().numpy().astype(np.float32)
+            for key, texture_path in scene._shape_texture_paths.items():
+                if texture_path == scene.texture_attack_target:
+                    scene_dict[key]["bsdf"] = scene._bitmap_data_bsdf(
+                        scene_dict[key]["bsdf"], image_np
+                    )
 
         #LOAD THE SCENE        
         mitsuba_scene = mi.load_dict(scene_dict)
@@ -86,19 +84,24 @@ class _MitsubaTorchRender(torch.autograd.Function):
         dr.enable_grad(params[light_position_key])
 
         #CALCULATE GRADIENTS FOR TEXTURES
-        shirt_keys = []
-        if shirt_color is not None:
-            shirt_keys = [
-                f"{key}.bsdf.reflectance.value"
-                for key, _, _ in scene._part_shapes.get("shirt", [])
-                if f"{key}.bsdf.reflectance.value" in params
+        texture_keys = []
+        if texture_image is not None:
+            selected_shapes = [
+                key for key, path in scene._shape_texture_paths.items()
+                if path == scene.texture_attack_target
             ]
-            if not shirt_keys:
+            texture_keys = [
+                candidate
+                for shape_key in selected_shapes
+                for candidate in params.keys()
+                if candidate.startswith(shape_key + ".") and candidate.endswith(".data")
+            ]
+            if not texture_keys:
                 raise RuntimeError(
-                    "Mitsuba did not expose a shirt reflectance parameter; "
-                    "cannot differentiate clothing color."
+                    f"Mitsuba did not expose bitmap data for {scene.texture_attack_target!r}; "
+                    "cannot differentiate texture pixels."
                 )
-            for key in shirt_keys:
+            for key in texture_keys:
                 dr.enable_grad(params[key])
 
         #UPDATE THE PARAMETERS        
@@ -117,8 +120,9 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ctx.light_key = light_key
         ctx.light_position_key = light_position_key
         ctx.light_rgb = np.asarray(scene.light_color, dtype=np.float32)
-        ctx.shirt_keys = shirt_keys
-        ctx.has_shirt_color = shirt_color is not None
+        ctx.texture_keys = texture_keys
+        ctx.has_texture_image = texture_image is not None
+        ctx.texture_shape = tuple(texture_image.shape) if texture_image is not None else None
         ctx.rot_deg = rot_deg
         ctx.save_for_backward(torch_from_numpy(image_np))
 
@@ -130,7 +134,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        """Map image gradients back to position, rotation, light, and shirt color."""
+        """Map image gradients back to position, rotation, light, and texture color."""
         image_t, = ctx.saved_tensors
 
         # CHANGE THE GRADIENTS DIMENSIONS
@@ -171,9 +175,9 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ).reshape(3)
     
 
-        shirt_grad = np.zeros(3, dtype=np.float32)
-        for key in ctx.shirt_keys:
-            shirt_grad += np.array(dr.grad(ctx.params[key]), copy=False).reshape(-1, 3).sum(axis=0)
+        texture_grad = np.zeros(ctx.texture_shape, dtype=np.float32) if ctx.has_texture_image else None
+        for key in ctx.texture_keys:
+            texture_grad += np.array(dr.grad(ctx.params[key]), copy=False).reshape(ctx.texture_shape)
         # The vertex-position cotangents also provide derivatives for the
         # Euler angles used by the static Mitsuba object transform.
         rotation_grad = np.zeros(3, dtype=np.float32)
@@ -202,8 +206,8 @@ class _MitsubaTorchRender(torch.autograd.Function):
             torch_from_numpy(rotation_grad).to(grad_output.device),
             torch.tensor(lighting_grad, dtype=grad_output.dtype, device=grad_output.device),
             (
-                torch_from_numpy(shirt_grad).to(grad_output.device)
-                if ctx.has_shirt_color
+                torch_from_numpy(texture_grad).to(grad_output.device)
+                if ctx.has_texture_image
                 else None
             ),
             torch_from_numpy(light_position_grad).to(grad_output.device),

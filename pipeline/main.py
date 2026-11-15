@@ -56,8 +56,12 @@ def main():
     # "pytorch3d" or "mitsuba"
     renderer = "mitsuba"
 
-    # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING"
-    property = "POSE"
+    # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
+    property = "TEXTURE"
+
+    # For Mitsuba TEXTURE attacks, set this to a diffuse map filename, e.g.
+    # "Jeep_inside_d.png". Leave None only when the model has one diffuse map.
+    texture_attack_target = 'Ch01_1001_Diffuse.png'
 
     #DEFINE MODELS
     model = "human"
@@ -118,6 +122,8 @@ def main():
         model=model,
         environment=environment,
     )
+    if renderer == "mitsuba" and texture_attack_target is not None:
+        scene.set_texture_attack_target(texture_attack_target)
 
 
     #DEFINE THE CLASSIFIER
@@ -175,6 +181,10 @@ def main():
     )
 
     save_image(result.best_image, str(output_path))
+    if property == "TEXTURE" and hasattr(scene, "save_texture_image"):
+        texture_output = out_dir / f"optimized_{Path(scene.texture_attack_target).name}"
+        scene.save_texture_image(str(texture_output), result.best_property_value)
+        print(f"Optimized texture  : {texture_output}")
 
     print("\nRESULT")
     print(f"Success           : {result.success}")

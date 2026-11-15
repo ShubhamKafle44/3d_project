@@ -144,19 +144,11 @@ class SceneControlsMixin:
 
     # ---- material -------------------------------------------------------
     def set_material_color(self, part_name: str, rgb: Tuple[float, float, float]) -> None:
-        """Set a part's fallback color and update the differentiable shirt color."""
+        """Set a part's fallback color for faces without a diffuse texture."""
         self._part_colors[part_name] = tuple(float(c) for c in rgb)
-        if part_name == "shirt" and self.shirt_color_parameter is not None:
-            with torch.no_grad():
-                self.shirt_color_parameter.copy_(torch.as_tensor(rgb))
-            self.shirt_color_parameter.grad = None
-            if self._active_differentiable_property == "CLOTHING":
-                self._shirt_color_override = tuple(float(c) for c in rgb)
 
     def get_material_color(self, part_name: str) -> np.ndarray:
         """Return the current color for a part as an RGB NumPy array."""
-        if part_name == "shirt" and self.shirt_color_parameter is not None:
-            return self.shirt_color_parameter.detach().cpu().numpy().copy()
         return np.array(self._part_colors.get(part_name, (0.8, 0.8, 0.8)))
 
     # ---- camera ----------------------------------------------------------

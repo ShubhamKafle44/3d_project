@@ -87,5 +87,5 @@ def apply_parameter_bounds(property_name: str, parameters, initial_position) -> 
             bounds = getattr(config, "LIGHT_POSITION_BOUNDS", ((-8.0, 8.0), (0.5, 10.0), (-8.0, 8.0)))
             for axis, (lower, upper) in enumerate(bounds):
                 parameters[4][axis].clamp_(lower, upper)
-        if property_name == "CLOTHING":
+        if property_name == "TEXTURE":
             parameters[3].clamp_(0.0, 1.0)

@@ -11,6 +11,33 @@ import config
 
 
 class SceneAssemblyMixin:
+    @staticmethod
+    def _bitmap_data_bsdf(bsdf: dict, image: np.ndarray) -> dict:
+        """Replace the first bitmap in a material tree with runtime image data."""
+        result = copy.deepcopy(bsdf)
+
+        def replace(node):
+            if not isinstance(node, dict):
+                return False
+            if node.get("type") == "bitmap":
+                node.clear()
+                node.update({
+                    "type": "bitmap",
+                    "data": mi.TensorXf(np.asarray(image, dtype=np.float32)),
+                    "raw": True,
+                    "format": "variant",
+                })
+                return True
+            return any(
+                replace(value)
+                for key, value in node.items()
+                if key != "opacity" and isinstance(value, dict)
+            )
+
+        if not replace(result):
+            raise ValueError("Selected texture material does not contain a bitmap")
+        return result
+
     # ---- scene assembly -------------------------------------------------
     def _camera_origin(self) -> Tuple[float, float, float]:
         """Convert the orbit camera settings into a world-space position."""
@@ -106,14 +133,14 @@ class SceneAssemblyMixin:
         for name, shapes in self._part_shapes.items():
             r, g, b = self._part_colors.get(name, (0.8, 0.8, 0.8))
             for key, mesh_path, bsdf in shapes:
-                if name == "shirt" and self._shirt_color_override is not None:
-                    bsdf = {
-                        "type": "diffuse",
-                        "reflectance": {
-                            "type": "rgb",
-                            "value": list(self._shirt_color_override),
-                        },
-                    }
+                texture_path = self._shape_texture_paths.get(key)
+                if (
+                    self.texture_attack_target is not None
+                    and texture_path == self.texture_attack_target
+                    and self._texture_image_override is not None
+                    and bsdf is not None
+                ):
+                    bsdf = self._bitmap_data_bsdf(bsdf, self._texture_image_override)
                 scene_dict[key] = {
                     "type": "obj",
                     "filename": mesh_path,

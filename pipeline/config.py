@@ -66,7 +66,7 @@ SEARCH = {
 PROPERTY_BOUNDS = {
     "ROTATION": (0.0, 360.0),
     "LIGHTING": (0.5, 3.0),
-    "CLOTHING": (0.0, 1.0),
+    "TEXTURE": (0.0, 1.0),
 }
 
 # Keep optimized point-light positions in a useful region around the subject.

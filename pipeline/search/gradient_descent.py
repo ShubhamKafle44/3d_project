@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from detector import ObjectDetectionClassifier
 
 
-PROPERTIES = ("POSITION", "ROTATION", "POSE", "LIGHTING", "CLOTHING")
+PROPERTIES = ("POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE")
 
 
 def _prepare_output(snapshot_dir: Optional[str], metrics_csv: Optional[str]) -> None:
@@ -87,16 +87,14 @@ def run_gradient_descent(
         raise RuntimeError("Initial position is outside the frame or intersects scene geometry")
 
     scene._active_differentiable_property = property_name
+    if property_name == "TEXTURE" and hasattr(scene, "set_texture_attack_target"):
+        scene.set_texture_attack_target(getattr(scene, "texture_attack_target", None))
     parameters = scene.differentiable_parameters()
-    if property_name == "CLOTHING":
-        has_shirt = bool(
-            getattr(scene, "parts", {}).get("shirt")
-            or getattr(scene, "_part_shapes", {}).get("shirt")
-        )
-        if not has_shirt:
-            raise ValueError("CLOTHING optimization requires a model part named 'shirt'")
-        if hasattr(scene, "_shirt_color_override"):
-            scene._shirt_color_override = tuple(parameters[3].detach().cpu().numpy().tolist())
+    if property_name == "TEXTURE":
+        if not hasattr(scene, "set_texture_attack_target"):
+            has_target = bool(getattr(scene, "parts", {}).get("shirt"))
+            if not has_target:
+                raise ValueError("TEXTURE optimization requires a supported texture target")
 
     initial_img = scene.render()
     if initial_img is None:
@@ -145,7 +143,7 @@ def run_gradient_descent(
         "ROTATION": (1,),
         "POSE": (0, 1),
         "LIGHTING": (2, 4),
-        "CLOTHING": (3,),
+        "TEXTURE": (3,),
     }[property_name]
     optimized_parameters = [parameters[index] for index in parameter_indices]
     for model_parameter in classifier.model.parameters():

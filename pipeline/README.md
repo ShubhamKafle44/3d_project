@@ -66,7 +66,7 @@ cd pipeline
 python main.py
 ```
 
-The `renderer`, `property`, and `detector_target` variables near the top of `main.py` select the renderer, differentiable target, and COCO class. Both renderers support `POSITION`, `LIGHTING`, `ROTATION`, `CLOTHING`, and `POSE` (position plus rotation). Set `detector_target` to a class such as `person`, `car`, or `dog`. The search uses a differentiable target-class surrogate and periodically checks that class's actual detector score.
+The `renderer`, `property`, and `detector_target` variables near the top of `main.py` select the renderer, differentiable target, and COCO class. Both renderers support `POSITION`, `LIGHTING`, `ROTATION`, `TEXTURE`, and `POSE` (position plus rotation). Set `detector_target` to a class such as `person`, `car`, or `dog`. The search uses a differentiable target-class surrogate and periodically checks that class's actual detector score.
 
 Mitsuba uses `llvm_ad_rgb` by default for CPU differentiation. On a compatible NVIDIA setup, set `MITSUBA_VARIANT=cuda_ad_rgb` before starting the process to use the CUDA AD variant.
 
@@ -157,8 +157,10 @@ once with `ssh username@host` and verify the key before running the downloader.
 
 - Gradient search minimizes a differentiable surrogate for the selected COCO
   class, then periodically checks the detector's actual score for that class.
-  Mitsuba represents clothing as
-  a uniform diffuse shirt color during optimization.
+  Mitsuba optimizes the selected diffuse texture map while preserving its UV
+  mapping. Set `texture_attack_target` in `main.py` to the map filename, such
+  as `Jeep_inside_d.png`; the optimized copy is saved in the run output folder.
+  If a model has multiple diffuse maps, choose one explicitly.
 - The default multipart model is in `assets/3D_MODELS/human/`; replace or add
   assets in the model and environment libraries to try other scenes.
 - The Mitsuba renderer uses `llvm_ad_rgb` by default so gradient mode works

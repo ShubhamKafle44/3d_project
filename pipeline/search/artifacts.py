@@ -45,6 +45,13 @@ def append_optimization_record(
             if isinstance(item, torch.Tensor):
                 item = item.detach().cpu().numpy()
             if isinstance(item, np.ndarray):
+                if item.size > 10000:
+                    return {
+                        "shape": list(item.shape),
+                        "min": float(item.min()),
+                        "mean": float(item.mean()),
+                        "max": float(item.max()),
+                    }
                 item = item.tolist()
             if isinstance(item, dict):
                 return {str(key): normalize(val) for key, val in item.items()}
@@ -60,7 +67,7 @@ def append_optimization_record(
         state = optimizer.state.get(parameter, {}) if optimizer is not None else {}
         optimizer_state.append({
             key: (value.item() if isinstance(value, torch.Tensor) and value.numel() == 1
-                  else value.detach().cpu().tolist() if isinstance(value, torch.Tensor)
+                  else _compact_tensor(value) if isinstance(value, torch.Tensor)
                   else value)
             for key, value in state.items()
         })
@@ -74,6 +81,19 @@ def append_optimization_record(
         encode(learning_rates), snapshot_name,
     ))
     workbook.save(workbook_path)
+
+
+def _compact_tensor(value: torch.Tensor):
+    """Keep image-sized Adam moments compact in optimization workbooks."""
+    value = value.detach().cpu()
+    if value.numel() > 10000:
+        return {
+            "shape": list(value.shape),
+            "min": float(value.min()),
+            "mean": float(value.mean()),
+            "max": float(value.max()),
+        }
+    return value.tolist()
 
 
 def save_image(img: np.ndarray, path: str) -> None:

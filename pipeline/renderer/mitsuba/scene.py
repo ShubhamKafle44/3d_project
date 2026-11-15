@@ -35,6 +35,7 @@ class MitsubaScene(
         self._part_colors: Dict[str, Tuple[float, float, float]] = {}
         self._part_dirs: Dict[str, TemporaryDirectory] = {}
         self._part_shapes: Dict[str, list] = {}  # name -> [(scene key, obj path, bsdf or None)]
+        self._shape_texture_paths: Dict[str, str] = {}
         self._background_path: Optional[str] = None
         self._background_dir: Optional[TemporaryDirectory] = None
         self._background_shapes: Optional[dict] = None
@@ -49,8 +50,10 @@ class MitsubaScene(
         self.rotation_parameter = None
         self.lighting_parameter = None
         self.light_position_parameter = None
-        self.shirt_color_parameter = None
-        self._shirt_color_override = None
+        self.texture_color_parameter = None
+        self.texture_image_parameter = None
+        self.texture_attack_target = None
+        self._texture_image_override = None
         self._active_differentiable_property = None
         self.key_light_intensity = 1.0
         self.light_position = np.asarray(config.LIGHT["position"], dtype=np.float32)
