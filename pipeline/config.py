@@ -14,6 +14,10 @@ BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 # --------------------------------------------------------------------------
 MITSUBA_SPP = 4
 
+TEXTURE_ATTACK_RESOLUTION = 256
+TEXTURE_ATTACK_NOISE_STD = 0.30
+TEXTURE_ATTACK_NOISE_SEED = 7
+
 # Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
 MITSUBA_VARIANT = "cuda_ad_rgb"
 
@@ -56,7 +60,7 @@ DEFAULT_MATERIAL_COLORS = {
 SEARCH = {
     "epochs": 100,
     "success_threshold": 0.05,      
-    "gradient_learning_rate": 1,
+    "gradient_learning_rate": 0.01,
     "gradient_validate_every": 1,
     "gradient_snapshot_every": 10,
     "gradient_image_size": 512,

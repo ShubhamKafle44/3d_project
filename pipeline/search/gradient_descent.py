@@ -149,13 +149,10 @@ def run_gradient_descent(
     for model_parameter in classifier.model.parameters():
         model_parameter.requires_grad_(False)
 
-    # Texture pixels are bounded to [0, 1]. Adam with a large nominal rate
-    # can send most pixels straight to those bounds in one step, so cap the
-    # per-pixel step size while still honoring smaller configured rates.
+    # Keep the lighting step size bounded; texture uses the configured rate
+    # directly, like the other search properties.
     if property_name == "LIGHTING":
         optimizer_learning_rate = min(learning_rate, 0.05)
-    elif property_name == "TEXTURE":
-        optimizer_learning_rate = min(learning_rate, 0.01)
     else:
         optimizer_learning_rate = learning_rate
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
+import config
 
 from ..collision import obj_bounds, obj_face_bounds
 from .materials import read_materials, split_materials, texture_bsdf
@@ -70,34 +71,54 @@ class AssetLoadingMixin:
         paths = sorted({self._shape_texture_paths[key] for key in shape_keys})
         self._texture_attack_assets = []
         from PIL import Image
-        # A texture attack is represented by one shared, fixed-size RGB image.
-        # Resizing here keeps the optimizer dimensionality independent of the
-        # source asset and lets every selected material use the same attack.
-        resized_maps = []
+
+        resolution = int(getattr(config, "TEXTURE_ATTACK_RESOLUTION", 256))
+        noise_std = float(getattr(config, "TEXTURE_ATTACK_NOISE_STD", 0.30))
+        noise_seed = int(getattr(config, "TEXTURE_ATTACK_NOISE_SEED", 7))
+        if resolution < 1:
+            raise ValueError("TEXTURE_ATTACK_RESOLUTION must be positive")
+        if noise_std < 0:
+            raise ValueError("TEXTURE_ATTACK_NOISE_STD must be non-negative")
+
+        # Preserve each default material map and its UV layout. Add fixed-seed
+        # pixel noise in linear RGB before optimizing, so runs start from a
+        # reproducible noisy version of the model's actual texture.
+        rng = np.random.default_rng(noise_seed)
+        offset = 0
         for path in paths:
             with Image.open(path) as image:
                 srgb = np.asarray(
-                    image.convert("RGB").resize((256, 256), Image.Resampling.BILINEAR),
+                    image.convert("RGB").resize(
+                        (resolution, resolution), Image.Resampling.LANCZOS
+                    ),
                     dtype=np.float32,
                 ) / 255.0
-            linear_map = np.where(
+            linear = np.where(
                 srgb <= 0.04045,
                 srgb / 12.92,
                 ((srgb + 0.055) / 1.055) ** 2.4,
             ).astype(np.float32)
-            resized_maps.append(linear_map)
-        # Average all source maps in linear light so the single attack image
-        # starts with a representative appearance across selected materials.
-        linear = np.mean(resized_maps, axis=0, dtype=np.float32)
-        self._texture_attack_assets.append({
-            "path": paths[0],
-            "source_paths": paths,
-            "shape_keys": shape_keys,
-            "shape": (256, 256, 3),
-            "offset": 0,
-            "count": int(linear.size),
-            "initial": linear.reshape(-1),
-        })
+            if noise_std:
+                linear = np.clip(
+                    linear + rng.normal(0.0, noise_std, linear.shape).astype(np.float32),
+                    0.0,
+                    1.0,
+                )
+            mapped_shapes = [
+                key for key in shape_keys
+                if self._shape_texture_paths[key] == path
+            ]
+            count = int(linear.size)
+            self._texture_attack_assets.append({
+                "path": path,
+                "source_paths": [path],
+                "shape_keys": mapped_shapes,
+                "shape": (resolution, resolution, 3),
+                "offset": offset,
+                "count": count,
+                "initial": linear.reshape(-1),
+            })
+            offset += count
 
         self.texture_attack_target = target
         self._texture_image_override = None
@@ -153,7 +174,10 @@ class AssetLoadingMixin:
                 1.055 * np.maximum(linear, 0.0) ** (1.0 / 2.4) - 0.055,
             )
             rgb = (np.clip(srgb, 0.0, 1.0) * 255.0).round().astype(np.uint8)
-            destination = output_path / f"optimized_{self.texture_attack_target}_texture.png"
+            suffix = f"_{Path(asset['path']).stem}"
+            destination = output_path / (
+                f"optimized_{self.texture_attack_target}{suffix}_texture.png"
+            )
             Image.fromarray(rgb).save(destination)
             saved.append(str(destination))
         return saved
@@ -191,3 +215,6 @@ class AssetLoadingMixin:
             }
         self._background_shapes = shapes
 
+
+￼
+Latest response

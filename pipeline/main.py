@@ -59,17 +59,16 @@ def main():
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
     property = "TEXTURE"
 
-    # For Mitsuba TEXTURE attacks, set this to a loaded OBJ part name, e.g.
-    # "Jeep". All diffuse maps used by that OBJ are optimized together.
-    texture_attack_target = "shirt"
+    #FOR TARGET TEXTURE
+    texture_attack_target = "Jeep_Outside"
 
     #DEFINE MODELS
-    model = "human"
+    model = "Jeep"
     environment = "studio"
 
 
     detector_name = "fasterrcnn_resnet50_fpn_v2"
-    detector_target = "person"
+    detector_target = "truck"
 
 
     success_threshold = config.SEARCH["success_threshold"]
@@ -124,6 +123,7 @@ def main():
     )
     if renderer == "mitsuba" and texture_attack_target is not None:
         scene.set_texture_attack_target(texture_attack_target)
+        scene.set_texture_image(scene.load_texture_attack_image())
 
 
     #DEFINE THE CLASSIFIER
