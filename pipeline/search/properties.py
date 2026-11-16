@@ -47,11 +47,11 @@ def format_property(prop: str, value) -> str:
             f"position=({position[0]:+.3f}, {position[1]:+.3f}, {position[2]:+.3f}) "
             f"rotation=({rotation[0]:+.1f}°, {rotation[1]:+.1f}°, {rotation[2]:+.1f}°)"
         )
-    if prop == "TEXTURE" and np.asarray(value).ndim > 1:
+    if prop == "TEXTURE" and np.asarray(value).size > 3:
         image = np.asarray(value)
         return (
-            f"texture={image.shape[1]}x{image.shape[0]} "
-            f"RGB[min={image.min():.3f}, mean={image.mean():.3f}, max={image.max():.3f}]"
+            f"texture_values={image.size} "
+            f"RGB[min={image.min():.6f}, mean={image.mean():.6f}, max={image.max():.6f}]"
         )
     if prop in ("POSITION", "ROTATION", "TEXTURE"):
         a, b, c = np.asarray(value).tolist()

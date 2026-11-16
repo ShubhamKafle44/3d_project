@@ -130,17 +130,27 @@ class SceneAssemblyMixin:
             .rotate([0, 1, 0], self.rot_deg[2])
         )
 
+        texture_images = (
+            self._texture_images_from_vector(self._texture_image_override)
+            if self._texture_image_override is not None else []
+        )
+        texture_image_by_shape = {
+            shape_key: image
+            for asset, image in zip(self._texture_attack_assets, texture_images)
+            for shape_key in asset["shape_keys"]
+        }
         for name, shapes in self._part_shapes.items():
             r, g, b = self._part_colors.get(name, (0.8, 0.8, 0.8))
             for key, mesh_path, bsdf in shapes:
                 texture_path = self._shape_texture_paths.get(key)
                 if (
                     self.texture_attack_target is not None
-                    and texture_path == self.texture_attack_target
+                    and name == self.texture_attack_target
+                    and key in texture_image_by_shape
                     and self._texture_image_override is not None
                     and bsdf is not None
                 ):
-                    bsdf = self._bitmap_data_bsdf(bsdf, self._texture_image_override)
+                    bsdf = self._bitmap_data_bsdf(bsdf, texture_image_by_shape[key])
                 scene_dict[key] = {
                     "type": "obj",
                     "filename": mesh_path,

@@ -59,9 +59,9 @@ def main():
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
     property = "TEXTURE"
 
-    # For Mitsuba TEXTURE attacks, set this to a diffuse map filename, e.g.
-    # "Jeep_inside_d.png". Leave None only when the model has one diffuse map.
-    texture_attack_target = 'Ch01_1001_Diffuse.png'
+    # For Mitsuba TEXTURE attacks, set this to a loaded OBJ part name, e.g.
+    # "Jeep". All diffuse maps used by that OBJ are optimized together.
+    texture_attack_target = "shirt"
 
     #DEFINE MODELS
     model = "human"
@@ -181,10 +181,12 @@ def main():
     )
 
     save_image(result.best_image, str(output_path))
-    if property == "TEXTURE" and hasattr(scene, "save_texture_image"):
-        texture_output = out_dir / f"optimized_{Path(scene.texture_attack_target).name}"
-        scene.save_texture_image(str(texture_output), result.best_property_value)
-        print(f"Optimized texture  : {texture_output}")
+    if property == "TEXTURE" and hasattr(scene, "save_texture_images"):
+        texture_paths = scene.save_texture_images(
+            str(out_dir / "optimized_textures"), result.best_property_value
+        )
+        for texture_path in texture_paths:
+            print(f"Optimized texture  : {texture_path}")
 
     print("\nRESULT")
     print(f"Success           : {result.success}")

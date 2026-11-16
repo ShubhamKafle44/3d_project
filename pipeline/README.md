@@ -157,10 +157,11 @@ once with `ssh username@host` and verify the key before running the downloader.
 
 - Gradient search minimizes a differentiable surrogate for the selected COCO
   class, then periodically checks the detector's actual score for that class.
-  Mitsuba optimizes the selected diffuse texture map while preserving its UV
-  mapping. Set `texture_attack_target` in `main.py` to the map filename, such
-  as `Jeep_inside_d.png`; the optimized copy is saved in the run output folder.
-  If a model has multiple diffuse maps, choose one explicitly.
+  Mitsuba optimizes one shared 256×256 RGB image across all diffuse materials
+  used by the selected OBJ part, preserving their UV mappings. The image is
+  initialized from resized source maps and saved in the run output folder.
+  Set `texture_attack_target` in `main.py` to a loaded part name such as
+  `Jeep`; for folder-based models, part names come from OBJ filenames.
 - The default multipart model is in `assets/3D_MODELS/human/`; replace or add
   assets in the model and environment libraries to try other scenes.
 - The Mitsuba renderer uses `llvm_ad_rgb` by default so gradient mode works

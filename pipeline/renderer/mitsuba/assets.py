@@ -42,46 +42,83 @@ class AssetLoadingMixin:
         self._part_shapes[name] = shapes
 
     def available_texture_targets(self) -> list[str]:
-        """Return diffuse texture filenames available on loaded subject meshes."""
-        return sorted({Path(path).name for path in self._shape_texture_paths.values()})
+        """Return loaded OBJ part names that have at least one diffuse texture."""
+        textured_parts = set()
+        for part_name, shapes in self._part_shapes.items():
+            if any(key in self._shape_texture_paths for key, _, _ in shapes):
+                textured_parts.add(part_name)
+        return sorted(textured_parts)
 
     def set_texture_attack_target(self, target: str | None = None) -> str:
-        """Resolve a texture filename/path and select its material for optimization."""
-        paths = set(self._shape_texture_paths.values())
+        """Select an OBJ part and prepare all of its diffuse maps for optimization."""
         if target is None:
-            if len(paths) != 1:
-                choices = ", ".join(self.available_texture_targets()) or "(no diffuse maps found)"
-                raise ValueError(f"Choose texture_attack_target from: {choices}")
-            resolved = next(iter(paths))
-        else:
-            candidate = Path(target).expanduser()
-            matches = [
-                path for path in paths
-                if path == str(candidate.resolve()) or Path(path).name == candidate.name
-            ]
-            if len(matches) != 1:
-                choices = ", ".join(self.available_texture_targets()) or "(no diffuse maps found)"
-                raise ValueError(
-                    f"Texture target {target!r} did not identify one loaded diffuse map. "
-                    f"Choose from: {choices}"
-                )
-            resolved = matches[0]
-        self.texture_attack_target = resolved
+            targets = self.available_texture_targets()
+            if len(targets) != 1:
+                choices = ", ".join(targets) or "(no textured OBJ parts found)"
+                raise ValueError(f"Choose texture_attack_target from loaded OBJ parts: {choices}")
+            target = targets[0]
+        if target not in self._part_shapes:
+            choices = ", ".join(self.available_texture_targets()) or "(no textured OBJ parts found)"
+            raise ValueError(f"OBJ texture target {target!r} is not loaded. Choose from: {choices}")
+
+        shape_keys = [
+            key for key, _, _ in self._part_shapes[target]
+            if key in self._shape_texture_paths
+        ]
+        if not shape_keys:
+            raise ValueError(f"OBJ part {target!r} has no diffuse texture maps to optimize")
+        paths = sorted({self._shape_texture_paths[key] for key in shape_keys})
+        self._texture_attack_assets = []
+        from PIL import Image
+        # A texture attack is represented by one shared, fixed-size RGB image.
+        # Resizing here keeps the optimizer dimensionality independent of the
+        # source asset and lets every selected material use the same attack.
+        resized_maps = []
+        for path in paths:
+            with Image.open(path) as image:
+                srgb = np.asarray(
+                    image.convert("RGB").resize((256, 256), Image.Resampling.BILINEAR),
+                    dtype=np.float32,
+                ) / 255.0
+            linear_map = np.where(
+                srgb <= 0.04045,
+                srgb / 12.92,
+                ((srgb + 0.055) / 1.055) ** 2.4,
+            ).astype(np.float32)
+            resized_maps.append(linear_map)
+        # Average all source maps in linear light so the single attack image
+        # starts with a representative appearance across selected materials.
+        linear = np.mean(resized_maps, axis=0, dtype=np.float32)
+        self._texture_attack_assets.append({
+            "path": paths[0],
+            "source_paths": paths,
+            "shape_keys": shape_keys,
+            "shape": (256, 256, 3),
+            "offset": 0,
+            "count": int(linear.size),
+            "initial": linear.reshape(-1),
+        })
+
+        self.texture_attack_target = target
         self._texture_image_override = None
         self.texture_image_parameter = None
-        return resolved
+        return target
 
     def load_texture_attack_image(self) -> np.ndarray:
-        """Load the selected sRGB texture as a linear RGB optimization tensor."""
-        if self.texture_attack_target is None:
-            self.set_texture_attack_target()
-        from PIL import Image
+        """Load the shared 256x256 linear RGB attack image as a flat vector."""
+        if not self._texture_attack_assets:
+            self.set_texture_attack_target(self.texture_attack_target)
+        return np.concatenate([asset["initial"] for asset in self._texture_attack_assets])
 
-        image = np.asarray(Image.open(self.texture_attack_target).convert("RGB"), dtype=np.float32) / 255.0
-        return np.where(image <= 0.04045, image / 12.92, ((image + 0.055) / 1.055) ** 2.4).astype(np.float32)
+    def _texture_images_from_vector(self, vector: np.ndarray) -> list[np.ndarray]:
+        values = np.asarray(vector, dtype=np.float32).reshape(-1)
+        return [
+            values[asset["offset"]:asset["offset"] + asset["count"]].reshape(asset["shape"])
+            for asset in self._texture_attack_assets
+        ]
 
     def get_texture_image(self) -> np.ndarray:
-        """Return the selected optimized texture in linear RGB."""
+        """Return selected-part texture pixels in linear RGB."""
         if self.texture_image_parameter is not None:
             return self.texture_image_parameter.detach().cpu().numpy().copy()
         if self._texture_image_override is not None:
@@ -89,7 +126,7 @@ class AssetLoadingMixin:
         return self.load_texture_attack_image()
 
     def set_texture_image(self, image: np.ndarray) -> None:
-        """Set the selected texture image and synchronize its optimizer parameter."""
+        """Set selected-part texture pixels and synchronize the optimizer parameter."""
         value = np.asarray(image, dtype=np.float32)
         expected = self.load_texture_attack_image().shape
         if value.shape != expected:
@@ -102,18 +139,24 @@ class AssetLoadingMixin:
                 self.texture_image_parameter.copy_(torch.as_tensor(value))
             self.texture_image_parameter.grad = None
 
-    def save_texture_image(self, path: str, image: np.ndarray | None = None) -> None:
-        """Save a linear RGB texture as an 8-bit sRGB PNG."""
+    def save_texture_images(self, output_dir: str, vector: np.ndarray | None = None) -> list[str]:
+        """Save the optimized 256x256 RGB attack image as an 8-bit PNG."""
         from PIL import Image
-
-        linear = self.get_texture_image() if image is None else np.asarray(image, dtype=np.float32)
-        srgb = np.where(linear <= 0.0031308, 12.92 * linear, 1.055 * np.maximum(linear, 0.0) ** (1.0 / 2.4) - 0.055)
-        rgb = (np.clip(srgb, 0.0, 1.0) * 255.0).round().astype(np.uint8)
-        with Image.open(self.texture_attack_target) as source:
-            if "A" in source.getbands():
-                alpha = np.asarray(source.convert("RGBA"), dtype=np.uint8)[..., 3:4]
-                rgb = np.concatenate((rgb, alpha), axis=2)
-        Image.fromarray(rgb).save(path)
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        images = self._texture_images_from_vector(self.get_texture_image() if vector is None else vector)
+        saved = []
+        for asset, linear in zip(self._texture_attack_assets, images):
+            srgb = np.where(
+                linear <= 0.0031308,
+                12.92 * linear,
+                1.055 * np.maximum(linear, 0.0) ** (1.0 / 2.4) - 0.055,
+            )
+            rgb = (np.clip(srgb, 0.0, 1.0) * 255.0).round().astype(np.uint8)
+            destination = output_path / f"optimized_{self.texture_attack_target}_texture.png"
+            Image.fromarray(rgb).save(destination)
+            saved.append(str(destination))
+        return saved
 
     def _part_shape_keys(self) -> list:
         """Return the Mitsuba scene keys for all loaded subject shapes."""

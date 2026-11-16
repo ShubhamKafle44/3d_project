@@ -59,7 +59,7 @@ SEARCH = {
     "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
     "gradient_snapshot_every": 10,
-    "gradient_image_size": 4096,
+    "gradient_image_size": 512,
     "gradient_detector_size": 384,
 }
 

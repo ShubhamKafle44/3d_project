@@ -49,11 +49,14 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
         # Replace only the selected material's bitmap with differentiable data.
         if texture_image is not None:
-            image_np = texture_image.detach().cpu().numpy().astype(np.float32)
-            for key, texture_path in scene._shape_texture_paths.items():
-                if texture_path == scene.texture_attack_target:
+            image_np = texture_image.detach().cpu().numpy().astype(np.float32).reshape(-1)
+            for asset, image in zip(
+                scene._texture_attack_assets,
+                scene._texture_images_from_vector(image_np),
+            ):
+                for key in asset["shape_keys"]:
                     scene_dict[key]["bsdf"] = scene._bitmap_data_bsdf(
-                        scene_dict[key]["bsdf"], image_np
+                        scene_dict[key]["bsdf"], image
                     )
 
         #LOAD THE SCENE        
@@ -84,25 +87,31 @@ class _MitsubaTorchRender(torch.autograd.Function):
         dr.enable_grad(params[light_position_key])
 
         #CALCULATE GRADIENTS FOR TEXTURES
-        texture_keys = []
+        texture_key_groups = []
         if texture_image is not None:
-            selected_shapes = [
-                key for key, path in scene._shape_texture_paths.items()
-                if path == scene.texture_attack_target
-            ]
-            texture_keys = [
-                candidate
-                for shape_key in selected_shapes
-                for candidate in params.keys()
-                if candidate.startswith(shape_key + ".") and candidate.endswith(".data")
-            ]
-            if not texture_keys:
+            for asset in scene._texture_attack_assets:
+                keys = [
+                    candidate
+                    for shape_key in asset["shape_keys"]
+                    for candidate in params.keys()
+                    # The material may also contain a single-channel opacity
+                    # bitmap (``...opacity.data``). The forward pass replaces
+                    # only the diffuse reflectance bitmap with our RGB image,
+                    # so only its parameter belongs to this texture gradient.
+                    if candidate.startswith(shape_key + ".")
+                    and candidate.endswith(".reflectance.data")
+                ]
+                if not keys:
+                    continue
+                texture_key_groups.append((keys, asset["shape"]))
+            if len(texture_key_groups) != len(scene._texture_attack_assets):
                 raise RuntimeError(
-                    f"Mitsuba did not expose bitmap data for {scene.texture_attack_target!r}; "
-                    "cannot differentiate texture pixels."
+                    f"Mitsuba did not expose bitmap data for every texture on "
+                    f"OBJ part {scene.texture_attack_target!r}."
                 )
-            for key in texture_keys:
-                dr.enable_grad(params[key])
+            for keys, _ in texture_key_groups:
+                for key in keys:
+                    dr.enable_grad(params[key])
 
         #UPDATE THE PARAMETERS        
         params.update()
@@ -120,7 +129,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ctx.light_key = light_key
         ctx.light_position_key = light_position_key
         ctx.light_rgb = np.asarray(scene.light_color, dtype=np.float32)
-        ctx.texture_keys = texture_keys
+        ctx.texture_key_groups = texture_key_groups
         ctx.has_texture_image = texture_image is not None
         ctx.texture_shape = tuple(texture_image.shape) if texture_image is not None else None
         ctx.rot_deg = rot_deg
@@ -134,7 +143,7 @@ class _MitsubaTorchRender(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        """Map image gradients back to position, rotation, light, and texture color."""
+        """Map image gradients back to position, rotation, light, and texture pixels."""
         image_t, = ctx.saved_tensors
 
         # CHANGE THE GRADIENTS DIMENSIONS
@@ -175,9 +184,20 @@ class _MitsubaTorchRender(torch.autograd.Function):
         ).reshape(3)
     
 
-        texture_grad = np.zeros(ctx.texture_shape, dtype=np.float32) if ctx.has_texture_image else None
-        for key in ctx.texture_keys:
-            texture_grad += np.array(dr.grad(ctx.params[key]), copy=False).reshape(ctx.texture_shape)
+        texture_grad = []
+        for keys, image_shape in ctx.texture_key_groups:
+            image_grad = np.zeros(image_shape, dtype=np.float32)
+            for key in keys:
+                key_grad = np.array(dr.grad(ctx.params[key]), copy=False)
+                if key_grad.size != image_grad.size:
+                    raise RuntimeError(
+                        f"Unexpected gradient size for Mitsuba texture parameter {key!r}: "
+                        f"got {key_grad.size}, expected {image_grad.size} for RGB texture "
+                        f"shape {image_shape}."
+                    )
+                image_grad += key_grad.reshape(image_shape)
+            texture_grad.append(image_grad.reshape(-1))
+        texture_grad = np.concatenate(texture_grad) if texture_grad else np.zeros(0, dtype=np.float32)
         # The vertex-position cotangents also provide derivatives for the
         # Euler angles used by the static Mitsuba object transform.
         rotation_grad = np.zeros(3, dtype=np.float32)

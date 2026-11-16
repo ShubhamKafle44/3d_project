@@ -36,6 +36,7 @@ class MitsubaScene(
         self._part_dirs: Dict[str, TemporaryDirectory] = {}
         self._part_shapes: Dict[str, list] = {}  # name -> [(scene key, obj path, bsdf or None)]
         self._shape_texture_paths: Dict[str, str] = {}
+        self._texture_attack_assets: list[dict] = []
         self._background_path: Optional[str] = None
         self._background_dir: Optional[TemporaryDirectory] = None
         self._background_shapes: Optional[dict] = None
