@@ -1,4 +1,4 @@
-# Blender 5.3.0 MTL File: 'Sketchfab_2022_03_24_14_04_40.blend'
+# Blender 5.3.0 MTL File: 'Untitled.blend'
 # www.blender.org
 
 newmtl Blink_left
@@ -98,9 +98,9 @@ map_refl Mesh_Metallic.PNG
 map_Bump -bm 1.000000 Mesh_Normal_DirectX.PNG
 
 newmtl glass
-Ns 737.117920
+Ns 774.400024
 Ka 1.000000 1.000000 1.000000
-Kd 0.800000 0.800000 0.800000
+Kd 0.019382 0.036889 0.054480
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.450000
