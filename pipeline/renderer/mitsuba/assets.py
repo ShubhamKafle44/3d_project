@@ -7,7 +7,7 @@ import numpy as np
 import config
 
 from ..collision import obj_bounds, obj_face_bounds
-from .materials import read_materials, split_materials, texture_bsdf
+from .materials import material_bsdf, read_materials, split_materials
 
 
 class AssetLoadingMixin:
@@ -22,7 +22,7 @@ class AssetLoadingMixin:
         self._build_part_shapes(name, Path(path).resolve())
 
     def _build_part_shapes(self, name: str, obj_path: Path) -> None:
-        """Split the subject OBJ per textured material (same logic as the background)."""
+        """Split the subject OBJ by material and assign each material's BSDF."""
         for old_key, _, _ in self._part_shapes.get(name, []):
             self._shape_texture_paths.pop(old_key, None)
         old = self._part_dirs.pop(name, None)
@@ -35,10 +35,10 @@ class AssetLoadingMixin:
         materials = read_materials(obj_path)
         shapes = []
         for index, (material, mesh_path) in enumerate(split_materials(obj_path, materials, temp_dir)):
-            bsdf = texture_bsdf(materials[material], temp_dir) if material is not None else None
+            bsdf = material_bsdf(material, materials[material], temp_dir) if material is not None else None
             shape_key = f"part_{name}_{index}"
             shapes.append((shape_key, str(mesh_path), bsdf))
-            if material is not None:
+            if material is not None and materials[material]["kd"] is not None:
                 self._shape_texture_paths[shape_key] = str(materials[material]["kd"].resolve())
         self._part_shapes[name] = shapes
 
@@ -193,7 +193,7 @@ class AssetLoadingMixin:
                 "filename": str(mesh_path),
                 "face_normals": True,
                 "bsdf": (
-                    texture_bsdf(materials[material], temp_dir)
+                    material_bsdf(material, materials[material], temp_dir)
                     if material is not None
                     else {"type": "diffuse", "reflectance": {"type": "rgb", "value": [0.5] * 3}}
                 ),
