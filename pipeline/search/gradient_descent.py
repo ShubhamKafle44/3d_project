@@ -90,6 +90,9 @@ def run_gradient_descent(
     if property_name == "TEXTURE" and hasattr(scene, "set_texture_attack_target"):
         scene.set_texture_attack_target(getattr(scene, "texture_attack_target", None))
     parameters = scene.differentiable_parameters()
+    texture_reference = (
+        parameters[3].detach().clone() if property_name == "TEXTURE" else None
+    )
     if property_name == "TEXTURE":
         if not hasattr(scene, "set_texture_attack_target"):
             has_target = bool(getattr(scene, "parts", {}).get("shirt"))
@@ -167,6 +170,7 @@ def run_gradient_descent(
         loss_value = take_gradient_step(
             scene, classifier, loss_function, optimized_parameters,
             optimizer, detector_input_size, step, property_name,
+            regularization_reference=texture_reference,
         )
         apply_parameter_bounds(property_name, parameters, initial_position)
         enforce_scene_constraints(

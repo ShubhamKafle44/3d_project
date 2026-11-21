@@ -73,17 +73,8 @@ class AssetLoadingMixin:
         from PIL import Image
 
         resolution = int(getattr(config, "TEXTURE_ATTACK_RESOLUTION", 256))
-        noise_std = float(getattr(config, "TEXTURE_ATTACK_NOISE_STD", 0.30))
-        noise_seed = int(getattr(config, "TEXTURE_ATTACK_NOISE_SEED", 7))
         if resolution < 1:
             raise ValueError("TEXTURE_ATTACK_RESOLUTION must be positive")
-        if noise_std < 0:
-            raise ValueError("TEXTURE_ATTACK_NOISE_STD must be non-negative")
-
-        # Preserve each default material map and its UV layout. Add fixed-seed
-        # pixel noise in linear RGB before optimizing, so runs start from a
-        # reproducible noisy version of the model's actual texture.
-        rng = np.random.default_rng(noise_seed)
         offset = 0
         for path in paths:
             with Image.open(path) as image:
@@ -98,12 +89,6 @@ class AssetLoadingMixin:
                 srgb / 12.92,
                 ((srgb + 0.055) / 1.055) ** 2.4,
             ).astype(np.float32)
-            if noise_std:
-                linear = np.clip(
-                    linear + rng.normal(0.0, noise_std, linear.shape).astype(np.float32),
-                    0.0,
-                    1.0,
-                )
             mapped_shapes = [
                 key for key in shape_keys
                 if self._shape_texture_paths[key] == path
@@ -215,6 +200,3 @@ class AssetLoadingMixin:
             }
         self._background_shapes = shapes
 
-
-￼
-Latest response

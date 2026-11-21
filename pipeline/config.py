@@ -17,6 +17,8 @@ MITSUBA_SPP = 4
 TEXTURE_ATTACK_RESOLUTION = 256
 TEXTURE_ATTACK_NOISE_STD = 0.30
 TEXTURE_ATTACK_NOISE_SEED = 7
+# Penalize mean-squared pixel changes from the original texture during search.
+TEXTURE_ORIGINAL_PENALTY_WEIGHT = 10.0
 
 # Mitsuba variant: use "llvm_ad_rgb" for CPU or "cuda_ad_rgb" for GPU
 MITSUBA_VARIANT = "cuda_ad_rgb"

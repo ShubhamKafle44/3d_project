@@ -5,11 +5,22 @@ import config
 
 def take_gradient_step(scene, classifier, loss_function, optimized_parameters,
                        optimizer, detector_input_size: int, step: int,
-                       property_name: str) -> float:
+                       property_name: str, regularization_reference=None) -> float:
     """Differentiate the detector loss through the renderer and update leaves."""
     optimizer.zero_grad(set_to_none=True)
     differentiable_image = scene.render_differentiable()
     loss = loss_function(differentiable_image, input_size=detector_input_size)
+    if property_name == "TEXTURE" and regularization_reference is not None:
+        penalty_weight = float(
+            getattr(config, "TEXTURE_ORIGINAL_PENALTY_WEIGHT", 0.0)
+        )
+        if penalty_weight > 0:
+            texture = optimized_parameters[0]
+            reference = regularization_reference.to(
+                device=texture.device, dtype=texture.dtype
+            )
+            texture_penalty = torch.mean((texture - reference) ** 2)
+            loss = loss + penalty_weight * texture_penalty
     if not torch.isfinite(loss):
         raise RuntimeError(f"Non-finite detector loss at gradient step {step}")
     loss.backward()

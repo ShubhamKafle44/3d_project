@@ -60,15 +60,15 @@ def main():
     property = "TEXTURE"
 
     #FOR TARGET TEXTURE
-    texture_attack_target = "Jeep_Outside"
+    texture_attack_target = "car"
 
     #DEFINE MODELS
-    model = "Jeep"
-    environment = "studio"
+    model = "Car"
+    environment = "none"
 
 
     detector_name = "fasterrcnn_resnet50_fpn_v2"
-    detector_target = "truck"
+    detector_target = "car"
 
 
     success_threshold = config.SEARCH["success_threshold"]
@@ -121,11 +121,6 @@ def main():
         model=model,
         environment=environment,
     )
-    if renderer == "mitsuba" and texture_attack_target is not None:
-        scene.set_texture_attack_target(texture_attack_target)
-        scene.set_texture_image(scene.load_texture_attack_image())
-
-
     #DEFINE THE CLASSIFIER
     classifier = ObjectDetectionClassifier(
         model_name= detector_name,
@@ -146,8 +141,10 @@ def main():
     save_image(initial_img, str(out_dir / f"{run_name}_initial_render.png"))
 
 
-
-
+    # Prepare the texture attack only after saving the original baseline render.
+    if renderer == "mitsuba" and property == "TEXTURE":
+        scene.set_texture_attack_target(texture_attack_target)
+        scene.set_texture_image(scene.load_texture_attack_image())
 
 
     # =========================
