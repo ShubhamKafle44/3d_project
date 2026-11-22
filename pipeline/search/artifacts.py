@@ -23,7 +23,8 @@ def create_optimization_workbook(metrics_csv: Optional[str]) -> Optional[Path]:
     sheet = workbook.active
     sheet.title = "Optimization"
     sheet.append((
-        "step", "property", "loss", "validation_probability", "position",
+        "step", "property", "loss", "validation_probability",
+        "highest_class", "highest_class_probability", "position",
         "optimized_parameters", "gradients", "optimizer_state",
         "learning_rates", "snapshot_name",
     ))
@@ -35,6 +36,7 @@ def append_optimization_record(
     workbook_path: Optional[Path], *, step: int, property_name: str,
     loss: Optional[float], validation_probability: Optional[float], position,
     parameters, gradients, optimizer, snapshot_name: str = "",
+    highest_class: str = "", highest_class_probability: Optional[float] = None,
 ) -> None:
     """Append one optimizer-step observation, keeping tensors Excel-friendly."""
     if workbook_path is None:
@@ -76,6 +78,7 @@ def append_optimization_record(
     workbook = load_workbook(workbook_path)
     workbook.active.append((
         step, property_name, loss, validation_probability,
+        highest_class, highest_class_probability,
         encode(position), encode(parameters), encode(gradients),
         json.dumps(optimizer_state, sort_keys=True, default=str),
         encode(learning_rates), snapshot_name,
@@ -107,7 +110,10 @@ def initialize_metrics_file(metrics_csv: Optional[str]) -> None:
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     with metrics_path.open("w", newline="", encoding="utf-8") as csv_file:
         csv.writer(csv_file).writerow(
-            ("step", "parameter", "probability_percent", "snapshot_name")
+            (
+                "step", "parameter", "probability_percent", "highest_class",
+                "highest_class_probability_percent", "snapshot_name",
+            )
         )
 
 
@@ -117,10 +123,16 @@ def append_metrics_row(
     parameter: str,
     probability: float,
     snapshot_name: str,
+    highest_class: str = "",
+    highest_class_probability: Optional[float] = None,
 ) -> None:
     if metrics_csv is None:
         return
     with Path(metrics_csv).open("a", newline="", encoding="utf-8") as csv_file:
         csv.writer(csv_file).writerow(
-            (step, parameter, probability * 100.0, snapshot_name)
+            (
+                step, parameter, probability * 100.0, highest_class,
+                None if highest_class_probability is None else highest_class_probability * 100.0,
+                snapshot_name,
+            )
         )

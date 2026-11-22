@@ -31,13 +31,15 @@ def _prepare_output(snapshot_dir: Optional[str], metrics_csv: Optional[str]) -> 
 def _save_initial_observation(
     image, property_name: str, value, probability: float,
     snapshot_dir: Optional[str], metrics_csv: Optional[str], snapshot_prefix: str,
+    highest_class: str = "", highest_class_probability: Optional[float] = None,
 ) -> str:
     snapshot_name = ""
     if snapshot_dir is not None:
         snapshot_name = f"{snapshot_prefix}_step_00000.png" if snapshot_prefix else "step_00000.png"
         save_image(image, str(Path(snapshot_dir) / snapshot_name))
     append_metrics_row(
-        metrics_csv, 0, format_property(property_name, value), probability, snapshot_name
+        metrics_csv, 0, format_property(property_name, value), probability,
+        snapshot_name, highest_class, highest_class_probability,
     )
     return snapshot_name
 
@@ -120,10 +122,14 @@ def run_gradient_descent(
         optimization_workbook, step=0, property_name=property_name,
         loss=None, validation_probability=best_prob, position=scene.get_position(),
         parameters=parameters, gradients=[], optimizer=None,
+        highest_class=(top_detection["label"] if top_detection else "none"),
+        highest_class_probability=(top_detection["confidence"] if top_detection else 0.0),
     )
     _save_initial_observation(
         initial_img, property_name, best_value, best_prob,
         snapshot_dir, metrics_csv, snapshot_prefix,
+        top_detection["label"] if top_detection else "none",
+        top_detection["confidence"] if top_detection else 0.0,
     )
 
     if verbose:
@@ -142,8 +148,6 @@ def run_gradient_descent(
                 + f"{light_position[2]:+.3f})"
             )
         print(initial_line)
-        print(f"{'Step':>4} {'Loss':>10} {target_name + 'Prob':>10} Parameters")
-        print("-" * 88)
     result = _initial_result(
         best_prob, best_img, best_value, verbose, target_name, success_threshold
     )
@@ -170,6 +174,11 @@ def run_gradient_descent(
 
     if verbose:
         print(f"Optimizer learning rate: {optimizer_learning_rate:g}")
+        print(
+            f"{'Step':>4} {'Loss':>10} {target_name + 'Prob':>10} "
+            f"{'Highest class':>18} {'Class prob':>11} Parameters"
+        )
+        print("-" * 116)
 
     optimizer = torch.optim.Adam(optimized_parameters, lr=optimizer_learning_rate)
     exploration_rng = np.random.default_rng()
@@ -216,6 +225,11 @@ def run_gradient_descent(
             save_image(image, str(Path(snapshot_dir) / snapshot_name))
         result = classifier.classify(image)
         target_prob = result[score_key]
+        detections = result.get("detections", [])
+        top_detection = max(
+            detections, key=lambda detection: detection.get("confidence", 0.0),
+            default=None,
+        )
         current_value = get_property(scene, property_name)
         append_optimization_record(
             optimization_workbook, step=step, property_name=property_name,
@@ -223,11 +237,15 @@ def run_gradient_descent(
             position=scene.get_position(), parameters=parameters,
             gradients=[parameter.grad for parameter in optimized_parameters],
             optimizer=optimizer, snapshot_name=snapshot_name,
+            highest_class=(top_detection["label"] if top_detection else "none"),
+            highest_class_probability=(top_detection["confidence"] if top_detection else 0.0),
         )
         if should_snapshot:
             append_metrics_row(
                 metrics_csv, step, format_property(property_name, current_value),
                 target_prob, snapshot_name,
+                top_detection["label"] if top_detection else "none",
+                top_detection["confidence"] if top_detection else 0.0,
             )
         if target_prob < best_prob:
             best_prob = target_prob
@@ -246,8 +264,11 @@ def run_gradient_descent(
                     f"{light_position[0]:+.3f}, {light_position[1]:+.3f}, "
                     f"{light_position[2]:+.3f})"
                 )
+            highest_class = top_detection["label"] if top_detection else "none"
+            highest_prob = top_detection["confidence"] if top_detection else 0.0
             print(
                 f"{step:4d} {loss_value:10.4f} {target_prob * 100:9.2f}% "
+                f"{highest_class:>18} {highest_prob * 100:10.2f}% "
                 f"{parameter_text}"
             )
         if best_prob <= success_threshold:

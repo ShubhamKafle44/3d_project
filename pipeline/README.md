@@ -182,8 +182,10 @@ The sweep script starts in the background, so it keeps running after the
 terminal closes. Its `EPOCHS` and `LEARNING_RATES` arrays define the 100
 combinations. Each combination gets a separate output folder containing a
 `metrics.csv` and a `snapshots/` directory. The CSV records step, parameter,
-probability percentage, and snapshot filename; snapshots include the initial
-render and an image every 10 gradient steps. Sweep logs and an overall
+target-class probability, highest detected class and its score, and snapshot
+filename. The optimization workbook records the same detection fields for
+each validation step. Snapshots include the initial render and an image every
+10 gradient steps. Sweep logs and an overall
 `summary.csv` are saved under `outputs/sweeps/`. Each run is a separate Python
 process, releasing its CUDA and Dr.Jit allocations before the next run starts.
 The sweep continues after a failed run and records its exit status.
@@ -193,7 +195,8 @@ The sweep continues after a failed run and records its exit status.
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/<model>_<environment>_initial_render.png` — the starting render
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/snapshots/step_<step>.png` — renders saved every 10 gradient steps
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
-- Console log shows the selected target-class probability at every step and the final result
+- Console log shows the selected target-class probability, highest-scoring
+  detected class and its score at every validation step, plus the final result
 
 ## Download a run from another server
 

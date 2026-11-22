@@ -1,11 +1,11 @@
 DETECTOR_NAMES = (
     "fasterrcnn_resnet50_fpn_v2",
-    "yolo26n",
     "yolo26s",
     "yolo26m",
-    "yolo26l",
-    "yolo26x",
     "yoloe-26s-seg",
+    "yolo26n",
+    "yolo26x",
+    "yolo26l",
 )
 
 # Square render/input size used by each detector. Faster R-CNN's standard

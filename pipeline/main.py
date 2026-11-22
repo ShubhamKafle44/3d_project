@@ -73,7 +73,7 @@ def main():
     environment = "none"
 
     #CLASSIFIER
-    detector_name = "yoloe-26s-seg"
+    detector_name = "yolo26n"
     detector_target = "car"
 
 
