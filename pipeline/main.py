@@ -63,7 +63,7 @@ def main():
     renderer = "mitsuba"
 
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
-    property = "POSE"
+    property = "TEXTURE"
 
     #FOR TARGET TEXTURE
     texture_attack_target = "car"
@@ -73,7 +73,7 @@ def main():
     environment = "none"
 
     #CLASSIFIER
-    detector_name = "yolo26n"
+    detector_name = "yolo26m"
     detector_target = "car"
 
 

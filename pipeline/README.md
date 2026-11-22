@@ -163,6 +163,8 @@ a timestamped folder labeled with its epoch and learning-rate settings under
 `pipeline/outputs/` containing the initial render,
 an image snapshot every 10 gradient steps, and the best result. Runs therefore
 do not overwrite images from earlier runs.
+The run's `loss_curve.png` is refreshed after every optimizer iteration so it
+can be opened during the run to follow loss over time.
 
 To launch a 10,000-epoch search from inside `pipeline/` and keep it running after the terminal closes:
 
@@ -194,6 +196,7 @@ The sweep continues after a failed run and records its exit status.
 
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/<model>_<environment>_initial_render.png` — the starting render
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/snapshots/step_<step>.png` — renders saved every 10 gradient steps
+- `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/loss_curve.png` — loss versus iteration, refreshed after each optimizer step
 - `outputs/<timestamp>_<property>_e<epochs>_lr<rate>_<model>_<environment>/adversarial_result_<model>_<environment>_<renderer>_<property>.png` — the render with the lowest target-class confidence found
 - Console log shows the selected target-class probability, highest-scoring
   detected class and its score at every validation step, plus the final result

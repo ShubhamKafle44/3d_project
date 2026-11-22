@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 import torch
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 def create_optimization_workbook(metrics_csv: Optional[str]) -> Optional[Path]:
@@ -101,6 +101,45 @@ def _compact_tensor(value: torch.Tensor):
 
 def save_image(img: np.ndarray, path: str) -> None:
     Image.fromarray(img.astype(np.uint8)).save(path)
+
+
+def save_loss_plot(losses: list[float], path: str) -> None:
+    """Render the current loss history as a lightweight, refreshable PNG."""
+    width, height = 1000, 600
+    left, top, right, bottom = 90, 55, width - 35, height - 75
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+
+    draw.text((left, 18), "Optimization loss", fill="black")
+    draw.line((left, top, left, bottom), fill="#333333", width=2)
+    draw.line((left, bottom, right, bottom), fill="#333333", width=2)
+    draw.text((left, bottom + 28), "Iteration 1", fill="black")
+    draw.text((right - 95, bottom + 28), f"Iteration {len(losses)}", fill="black")
+
+    low, high = min(losses), max(losses)
+    if high == low:
+        padding = max(abs(low) * 0.05, 0.05)
+    else:
+        padding = (high - low) * 0.08
+    low -= padding
+    high += padding
+    draw.text((4, top), f"{high:.4g}", fill="black")
+    draw.text((4, bottom - 12), f"{low:.4g}", fill="black")
+
+    points = []
+    for index, loss in enumerate(losses):
+        x = left if len(losses) == 1 else left + index * (right - left) / (len(losses) - 1)
+        y = bottom - (loss - low) * (bottom - top) / (high - low)
+        points.append((round(x), round(y)))
+    if len(points) == 1:
+        x, y = points[0]
+        draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill="#1769aa")
+    else:
+        draw.line(points, fill="#1769aa", width=3)
+
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path)
 
 
 def initialize_metrics_file(metrics_csv: Optional[str]) -> None:

@@ -8,7 +8,7 @@ import config
 from renderer import DifferentiableScene
 from .artifacts import (
     append_metrics_row, append_optimization_record, create_optimization_workbook,
-    initialize_metrics_file, save_image,
+    initialize_metrics_file, save_image, save_loss_plot,
 )
 from .constraints import enforce_scene_constraints
 from .optimization import apply_parameter_bounds, take_gradient_step
@@ -182,6 +182,14 @@ def run_gradient_descent(
 
     optimizer = torch.optim.Adam(optimized_parameters, lr=optimizer_learning_rate)
     exploration_rng = np.random.default_rng()
+    loss_history = []
+    loss_plot_path = (
+        Path(metrics_csv).parent / "loss_curve.png"
+        if metrics_csv is not None
+        else Path(snapshot_dir).parent / "loss_curve.png"
+        if snapshot_dir is not None
+        else None
+    )
 
     for step in range(1, epochs + 1):
         previous_values = [parameter.detach().clone() for parameter in optimized_parameters]
@@ -190,6 +198,9 @@ def run_gradient_descent(
             optimizer, step, property_name,
             regularization_reference=texture_reference,
         )
+        loss_history.append(loss_value)
+        if loss_plot_path is not None:
+            save_loss_plot(loss_history, str(loss_plot_path))
         apply_parameter_bounds(property_name, parameters, initial_position)
         enforce_scene_constraints(
             scene, property_name, parameters, optimized_parameters,
