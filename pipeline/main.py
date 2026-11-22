@@ -27,6 +27,10 @@ def main():
     epochs = config.SEARCH["epochs"]
     learning_rate = config.SEARCH["gradient_learning_rate"]
 
+    # Default for background process.
+    detector_name = "yolo26m"
+    property = "TEXTURE"
+
     # Allow long runs to be started with an epoch override.
     if len(sys.argv) > 1:
         i = 1
@@ -52,6 +56,11 @@ def main():
                     raise ValueError("--detector requires a value")
                 detector_name = sys.argv[i + 1]
                 i += 2
+            elif sys.argv[i] == "--property":
+                if i + 1 >= len(sys.argv):
+                    raise ValueError("--property requires a value")
+                property = sys.argv[i + 1].upper()
+                i += 2
             else:
                 i += 1
 
@@ -64,7 +73,6 @@ def main():
 
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
     property = "TEXTURE"
-
     #FOR TARGET TEXTURE
     texture_attack_target = "car"
 

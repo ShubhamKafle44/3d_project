@@ -104,13 +104,14 @@ sizes (`n`, `s`, `m`, `l`, `x`), and YOLOE-26s for text-prompted open-vocabulary
 detection. YOLO26 is the latest released Ultralytics detector family; YOLO27
 is still marked as coming soon in the official docs. [YOLO26](https://docs.ultralytics.com/models/yolo26), [YOLO27 status](https://docs.ultralytics.com/models/yolo27)
 
-Select a detector by changing `detector_name` near the top of `main.py`, or
-pass it on the command line:
+Select a detector and search property by changing their defaults near the top
+of `main.py`, or pass them on the command line:
 
 ```bash
 python main.py --detector yolo26n
 python main.py --detector yolo26l --epochs 100
 python main.py --detector yoloe-26s-seg
+python main.py --detector yolo26m --property POSE --epochs 100 --learning-rate 0.01
 ```
 
 For YOLO models, install or upgrade Ultralytics with
@@ -166,13 +167,20 @@ do not overwrite images from earlier runs.
 The run's `loss_curve.png` is refreshed after every optimizer iteration so it
 can be opened during the run to follow loss over time.
 
-To launch a 10,000-epoch search from inside `pipeline/` and keep it running after the terminal closes:
+To launch the detector/property/epoch/learning-rate sweep from inside
+`pipeline/` and keep it running after the terminal closes:
 
 ```bash
 bash run_background.sh
 ```
 
-The script writes a timestamped log and PID file under `pipeline/outputs/`, then prints the commands to follow the log or stop the process. Pass a different positive epoch count as the first argument, followed by `main.py` options. Set the Adam learning rate with `--learning-rate` (default: `0.06`), for example: `bash run_background.sh 100 --learning-rate 0.01`. To use the default epoch count, you can run `bash run_background.sh --learning-rate 0.01`. The same option works when running `python main.py` directly. The search may finish earlier if it reaches the configured success threshold.
+Edit the `DETECTORS`, `PROPERTIES`, `EPOCHS`, and `LEARNING_RATES` arrays at
+the top of `run_background.sh` to choose the combinations. It runs all epoch
+and rate combinations for each property of each detector, in that order. Each
+combination gets its own log, and `summary.csv` records its exit status under a
+timestamped folder in `pipeline/outputs/sweeps/`. A failed run is recorded and
+the sweep continues. The search may finish early if it reaches the configured
+success threshold.
 
 To run a 10-by-10 grid of epoch and learning-rate settings sequentially:
 
