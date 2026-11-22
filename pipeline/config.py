@@ -80,7 +80,7 @@ SEARCH = {
     "success_threshold": 0.05,      
     "gradient_learning_rate": 0.01,
     "gradient_validate_every": 1,
-    "gradient_snapshot_every": 2,
+    "gradient_snapshot_every": 10,
 }
 
 PROPERTY_BOUNDS = {

@@ -16,8 +16,8 @@ DETECTORS=(
   yoloe-26s-seg
 )
 PROPERTIES=(POSITION ROTATION POSE LIGHTING TEXTURE)
-EPOCHS=(100)
-LEARNING_RATES=(0.01)
+EPOCHS=(100 1000)
+LEARNING_RATES=(0.001 0.01 0.05)
 
 if [[ "${1:-}" != "--worker" ]]; then
   mkdir -p "$OUTPUT_DIR/sweeps"

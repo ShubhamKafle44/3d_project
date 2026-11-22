@@ -29,6 +29,8 @@ def main():
 
     # Default for background process.
     detector_name = "yolo26m"
+
+    # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
     property = "TEXTURE"
 
     # Allow long runs to be started with an epoch override.
@@ -71,9 +73,8 @@ def main():
     # "pytorch3d" or "mitsuba"
     renderer = "mitsuba"
 
-    # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
-    property = "TEXTURE"
-    #FOR TARGET TEXTURE
+
+    # FOR TEXTURE searches
     texture_attack_target = "car"
 
     #DEFINE MODELS
@@ -81,7 +82,6 @@ def main():
     environment = "none"
 
     #CLASSIFIER
-    detector_name = "yolo26m"
     detector_target = "car"
 
 
