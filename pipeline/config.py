@@ -1,9 +1,15 @@
-HUMAN_PARTS = {
-    "body": "assets/3D_MODELS/human/body.obj",
-    "shirt": "assets/3D_MODELS/human/shirt.obj",
-    "pants": "assets/3D_MODELS/human/pants.obj",
-    "shoes_and_eyelash": "assets/3D_MODELS/human/shoes_and_eyelash.obj",
-}
+DETECTOR_NAMES = (
+    "fasterrcnn_resnet50_fpn_v2",
+    "yolo26n",
+    "yolo26s",
+    "yolo26m",
+    "yolo26l",
+    "yolo26x",
+    "yoloe-26s-seg",
+)
+
+YOLO_INPUT_SIZE = 640
+DETECTOR_CONFIDENCE_THRESHOLD = 0.05
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
 BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
@@ -65,7 +71,7 @@ SEARCH = {
     "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
     "gradient_snapshot_every": 2,
-    "gradient_image_size": 4096,
+    "gradient_image_size": 512,
 }
 
 PROPERTY_BOUNDS = {

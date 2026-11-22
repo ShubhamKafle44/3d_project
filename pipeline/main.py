@@ -7,7 +7,8 @@ from pathlib import Path
 import torch
 
 import config
-from detector import ObjectDetectionClassifier
+from config import DETECTOR_NAMES
+from detector import create_detector
 from scene_setup import  build_scene_layout
 from search import (
     PROPERTIES,
@@ -46,6 +47,11 @@ def main():
                 except ValueError as error:
                     raise ValueError("--learning-rate must be a positive number") from error
                 i += 2
+            elif sys.argv[i] == "--detector":
+                if i + 1 >= len(sys.argv):
+                    raise ValueError("--detector requires a value")
+                detector_name = sys.argv[i + 1]
+                i += 2
             else:
                 i += 1
 
@@ -63,12 +69,12 @@ def main():
     texture_attack_target = "car"
 
     #DEFINE MODELS
-    model = "human"
+    model = "Car"
     environment = "none"
 
-
-    detector_name = "fasterrcnn_resnet50_fpn_v2"
-    detector_target = "person"
+    #CLASSIFIER
+    detector_name = "yoloe-26s-seg"
+    detector_target = "car"
 
 
     success_threshold = config.SEARCH["success_threshold"]
@@ -79,6 +85,10 @@ def main():
         raise ValueError("renderer must be 'pytorch3d' or 'mitsuba'")
     if property not in PROPERTIES:
         raise ValueError(f"property must be one of {PROPERTIES}, got {property!r}")
+    if detector_name not in DETECTOR_NAMES:
+        raise ValueError(
+            f"detector must be one of {DETECTOR_NAMES}, got {detector_name!r}"
+        )
 
     if epochs < 1:
         raise ValueError("epochs must be a positive integer")
@@ -90,7 +100,10 @@ def main():
     output_root = Path(__file__).resolve().parent / "outputs"
     output_root.mkdir(parents=True, exist_ok=True)
     # NAME OF THE IMAGE
-    run_name = f"{_safe_name(model)}_{_safe_name(environment)}" 
+    run_name = (
+        f"{_safe_name(model)}_{_safe_name(environment)}_"
+        f"{_safe_name(detector_name)}"
+    )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     learning_rate_label = f"{learning_rate:g}".replace(".", "p")
     out_dir = output_root / f"{timestamp}_{property}_e{epochs}_lr{learning_rate_label}_{run_name}"
@@ -122,9 +135,10 @@ def main():
         environment=environment,
     )
     #DEFINE THE CLASSIFIER
-    classifier = ObjectDetectionClassifier(
-        model_name= detector_name,
+    classifier = create_detector(
+        model_name=detector_name,
         target_class=detector_target,
+        device=device,
     )
 
 

@@ -105,6 +105,11 @@ def run_gradient_descent(
     score_key = "target_prob" if "target_prob" in initial_result else "human_prob"
     target_name = getattr(classifier, "target_name", "person")
     best_prob = initial_result[score_key]
+    detections = initial_result.get("detections", [])
+    top_detection = max(
+        detections, key=lambda detection: detection.get("confidence", 0.0),
+        default=None,
+    )
     best_img = initial_img.copy()
     best_step = 0
     best_value = get_property(scene, property_name)
@@ -123,6 +128,11 @@ def run_gradient_descent(
 
     if verbose:
         initial_line = f"Initial {target_name}_prob = {best_prob * 100:.2f}%"
+        if top_detection is not None:
+            initial_line += (
+                f"; highest class = {top_detection['label']} "
+                f"({top_detection['confidence'] * 100:.2f}%)"
+            )
         if property_name == "LIGHTING":
             light_position = parameters[4].detach().cpu().numpy()
             initial_line += (

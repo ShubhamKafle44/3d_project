@@ -18,7 +18,7 @@ renderer/
   base.py                # DifferentiableScene interface both backends implement
   pytorch3d_renderer.py   # PyTorch3D backend
   mitsuba_renderer.py     # Mitsuba 3 / Dr.Jit backend
-assets/3D_MODELS/human/ # default multipart human model
+assets/3D_MODELS/Car/ # default Car model
 assets/3D_ENVIRONMENTS/studio/ # default studio environment
 ```
 
@@ -54,7 +54,31 @@ cd pipeline
 python main.py
 ```
 
-The checked-in `main.py` selects its renderer, detector, and search property in code. Edit those settings in `main.py` before launching to change them.
+The checked-in `main.py` selects its renderer and search property in code. The detector can be set in `main.py` or with `--detector` as described below.
+
+## Choose the detector
+
+The detector choices are listed in `config.py`: Faster R-CNN, all five YOLO26
+sizes (`n`, `s`, `m`, `l`, `x`), and YOLOE-26s for text-prompted open-vocabulary
+detection. YOLO26 is the latest released Ultralytics detector family; YOLO27
+is still marked as coming soon in the official docs. [YOLO26](https://docs.ultralytics.com/models/yolo26), [YOLO27 status](https://docs.ultralytics.com/models/yolo27)
+
+Select a detector by changing `detector_name` near the top of `main.py`, or
+pass it on the command line:
+
+```bash
+python main.py --detector yolo26n
+python main.py --detector yolo26l --epochs 100
+python main.py --detector yoloe-26s-seg
+```
+
+For YOLO models, install or upgrade Ultralytics with
+`python -m pip install -U ultralytics`; weights download the first time they
+are loaded. YOLOE-26 requires Ultralytics 8.4.0 or newer and adds its text
+encoder download on first use. The YOLOE option uses the configured target
+class as its text prompt. YOLO search uses a differentiable target-class score
+from the raw detection head, while validation uses the normal postprocessed
+detector outputs. The selected detector name is included in the run folder.
 
 ## Run
 
@@ -92,8 +116,8 @@ python main.py --model "delivery van" --environment "warehouse" --epochs 100
 python main.py --model "delivery van/van.obj" --environment none --epochs 100
 ```
 
-The built-in `human` model and `studio` environment remain the defaults.
-Custom models are automatically framed from their OBJ bounds. Each run creates
+The checked-in `main.py` defaults to the `Car` model and no environment.
+Selected models are automatically framed from their OBJ bounds. Each run creates
 a timestamped folder labeled with its epoch and learning-rate settings under
 `pipeline/outputs/` containing the initial render,
 an image snapshot every 10 gradient steps, and the best result. Runs therefore
@@ -162,8 +186,8 @@ once with `ssh username@host` and verify the key before running the downloader.
   initialized from resized source maps and saved in the run output folder.
   Set `texture_attack_target` in `main.py` to a loaded part name such as
   `Jeep`; for folder-based models, part names come from OBJ filenames.
-- The default multipart model is in `assets/3D_MODELS/human/`; replace or add
-  assets in the model and environment libraries to try other scenes.
+- The `Car` model is in `assets/3D_MODELS/Car/`; replace or add assets in the
+  model and environment libraries to try other scenes.
 - The Mitsuba renderer uses `llvm_ad_rgb` by default so gradient mode works
   on CPU. Set `MITSUBA_VARIANT=cuda_ad_rgb` before launch to use Mitsuba AD
   on a compatible NVIDIA GPU.

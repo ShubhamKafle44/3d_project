@@ -23,6 +23,7 @@ build/
 *.pth
 *.pt
 *.ckpt
+pipeline/mobileclip2_b.ts
 
 # PyQt / Qt specific
 *.qm

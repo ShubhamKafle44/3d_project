@@ -33,14 +33,8 @@ def _resolve_path(reference: str, asset_root: Path) -> Path:
 
 #RETURNS THE MESH PARTS ANF FILE PATH IN A DICTIONARY {'MESH1': /../}
 def _model_parts(model: str | None) -> dict[str, str]:
-    """Return named OBJ parts for a built-in model, OBJ file, or model folder."""
-    if model in (None, "human"):
-        return {
-            name: str((PIPELINE_DIR / path).resolve())
-            for name, path in config.HUMAN_PARTS.items()
-        }
-
-    path = _resolve_path(model, MODEL_DIR)
+    """Return named OBJ parts for a model file or model folder."""
+    path = _resolve_path(model or "Car", MODEL_DIR)
     if path.is_file():
         if path.suffix.lower() != ".obj":
             raise ValueError(f"Only OBJ model files are supported: {path}")
@@ -96,12 +90,9 @@ def _environment_path(environment: str | None) -> str | None:
 
 
 # THIS FUNCTION ENSURES THE MODEL IS VISIBLE IN THE SCENE
-def _camera_for_model(parts: dict[str, str], is_default_model: bool) -> dict:
-    """Keep the tuned default-human view, and fit custom model bounds to view."""
+def _camera_for_model(parts: dict[str, str]) -> dict:
+    """Fit the configured camera to the selected model bounds."""
     camera = dict(config.CAMERA)
-    if is_default_model:
-        return camera
-
     bounds = [obj_bounds(path) for path in parts.values()]
     lower = np.min([bound[0] for bound in bounds], axis=0)
     upper = np.max([bound[1] for bound in bounds], axis=0)
@@ -117,7 +108,7 @@ def build_scene_layout(
     backend: str,
     device: str,
     image_size: int | None = None,
-    model: str | None = "human",
+    model: str | None = "Car",
     environment: str | None = "studio",
 ) -> DifferentiableScene:
 
@@ -138,7 +129,7 @@ def build_scene_layout(
         if part_name in parts:
             scene.set_material_color(part_name, color)
 
-    scene.set_camera_orbit(**_camera_for_model(parts, model in (None, "human")))
+    scene.set_camera_orbit(**_camera_for_model(parts))
 
 
     # Mitsuba's lighting control is a multiplier for its direct point light,
