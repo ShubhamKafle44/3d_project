@@ -94,30 +94,16 @@ class ObjectDetectionClassifier:
     def target_probability(self, image: Union[torch.Tensor, np.ndarray]) -> float:
         return self.classify(image)["target_prob"]
 
-    def target_detection_loss(
-        self,
-        image: torch.Tensor,
-        input_size: int = 384,
-    ) -> torch.Tensor:
+    def target_detection_loss(self, image: torch.Tensor) -> torch.Tensor:
         """Return the strongest differentiable pre-NMS target-class probability.
 
         Proposal selection itself is discrete, but gradients flow through the
         selected RoI features, class logits, and rendered image.
         """
         image = self._to_image_tensor(image)
-        if input_size < 1:
-            raise ValueError("input_size must be positive")
-
-        transform = self.model.transform
-        original_min_size = transform.min_size
-        original_max_size = transform.max_size
-        transform.min_size = (input_size,)
-        transform.max_size = input_size
-        try:
-            images, _ = transform([image], None)
-        finally:
-            transform.min_size = original_min_size
-            transform.max_size = original_max_size
+        # Use the same model transform as classify(), so gradients and reported
+        # scores both see the same rendered image at the same detector scale.
+        images, _ = self.model.transform([image], None)
 
         features = self.model.backbone(images.tensors)
         if isinstance(features, torch.Tensor):

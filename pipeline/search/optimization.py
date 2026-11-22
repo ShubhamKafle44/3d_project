@@ -4,12 +4,12 @@ import config
 
 
 def take_gradient_step(scene, classifier, loss_function, optimized_parameters,
-                       optimizer, detector_input_size: int, step: int,
+                       optimizer, step: int,
                        property_name: str, regularization_reference=None) -> float:
     """Differentiate the detector loss through the renderer and update leaves."""
     optimizer.zero_grad(set_to_none=True)
     differentiable_image = scene.render_differentiable()
-    loss = loss_function(differentiable_image, input_size=detector_input_size)
+    loss = loss_function(differentiable_image)
     if property_name == "TEXTURE" and regularization_reference is not None:
         penalty_weight = float(
             getattr(config, "TEXTURE_ORIGINAL_PENALTY_WEIGHT", 0.0)
@@ -34,7 +34,6 @@ def take_gradient_step(scene, classifier, loss_function, optimized_parameters,
                 or torch.linalg.vector_norm(light_position.grad).item() < 1e-8:
             light_position.grad = _finite_difference_light_position_gradient(
                 scene, classifier, loss_function, light_position,
-                detector_input_size,
             )
     if any(
         parameter.grad is None or not torch.isfinite(parameter.grad).all()
@@ -55,7 +54,7 @@ def take_gradient_step(scene, classifier, loss_function, optimized_parameters,
 
 
 def _finite_difference_light_position_gradient(
-    scene, classifier, loss_function, light_position, detector_input_size: int,
+    scene, classifier, loss_function, light_position,
 ) -> torch.Tensor:
     """Estimate detector-loss derivatives for a stationary point light."""
     epsilon = 0.05
@@ -66,14 +65,10 @@ def _finite_difference_light_position_gradient(
             for axis in range(light_position.numel()):
                 light_position.copy_(original)
                 light_position[axis] += epsilon
-                plus = loss_function(
-                    scene.render_differentiable(), input_size=detector_input_size
-                ).detach()
+                plus = loss_function(scene.render_differentiable()).detach()
                 light_position.copy_(original)
                 light_position[axis] -= epsilon
-                minus = loss_function(
-                    scene.render_differentiable(), input_size=detector_input_size
-                ).detach()
+                minus = loss_function(scene.render_differentiable()).detach()
                 gradient[axis] = (plus - minus) / (2.0 * epsilon)
     finally:
         with torch.no_grad():

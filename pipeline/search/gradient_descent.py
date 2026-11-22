@@ -57,7 +57,6 @@ def run_gradient_descent(
     epochs: int = 100,
     learning_rate: float = 0.06,
     validate_every: int = 5,
-    detector_input_size: int = 384,
     success_threshold: Optional[float] = None,
     verbose: bool = True,
     snapshot_dir: Optional[str] = None,
@@ -169,7 +168,7 @@ def run_gradient_descent(
         previous_values = [parameter.detach().clone() for parameter in optimized_parameters]
         loss_value = take_gradient_step(
             scene, classifier, loss_function, optimized_parameters,
-            optimizer, detector_input_size, step, property_name,
+            optimizer, step, property_name,
             regularization_reference=texture_reference,
         )
         apply_parameter_bounds(property_name, parameters, initial_position)

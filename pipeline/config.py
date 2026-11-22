@@ -12,7 +12,7 @@ BACKGROUND_PATH = "assets/3D_ENVIRONMENTS/studio/environment.obj"
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
-MITSUBA_SPP = 4
+MITSUBA_SPP = 64
 
 TEXTURE_ATTACK_RESOLUTION = 256
 TEXTURE_ATTACK_NOISE_STD = 0.30
@@ -62,11 +62,10 @@ DEFAULT_MATERIAL_COLORS = {
 SEARCH = {
     "epochs": 100,
     "success_threshold": 0.05,      
-    "gradient_learning_rate": 0.01,
+    "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
-    "gradient_snapshot_every": 10,
-    "gradient_image_size": 512,
-    "gradient_detector_size": 384,
+    "gradient_snapshot_every": 2,
+    "gradient_image_size": 4096,
 }
 
 PROPERTY_BOUNDS = {

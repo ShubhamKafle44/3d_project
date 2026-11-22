@@ -57,18 +57,18 @@ def main():
     renderer = "mitsuba"
 
     # Other targets: "POSITION", "ROTATION", "POSE", "LIGHTING", "TEXTURE"
-    property = "TEXTURE"
+    property = "POSE"
 
     #FOR TARGET TEXTURE
     texture_attack_target = "car"
 
     #DEFINE MODELS
-    model = "Car"
+    model = "human"
     environment = "none"
 
 
     detector_name = "fasterrcnn_resnet50_fpn_v2"
-    detector_target = "car"
+    detector_target = "person"
 
 
     success_threshold = config.SEARCH["success_threshold"]
@@ -158,7 +158,6 @@ def main():
         epochs=epochs,
         learning_rate=learning_rate,
         validate_every=config.SEARCH["gradient_validate_every"], # THIS BUILDS THE IMAGE AFTER EVERY [gradient_validate_every] value.
-        detector_input_size=config.SEARCH["gradient_detector_size"],
         success_threshold=success_threshold,
         snapshot_dir=str(out_dir / "snapshots"),
         snapshot_every=config.SEARCH["gradient_snapshot_every"],

@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="$SCRIPT_DIR/outputs"
 
 # Edit these arrays to change the 10 x 10 parameter grid.
-EPOCHS=(100 200 300 500 750 1000 1500 2000 3000 5000)
-LEARNING_RATES=(0.005 0.01 0.02 0.03 0.04 0.06 0.08 0.10 0.15 1.0)
+EPOCHS=(100)
+LEARNING_RATES=(0.01 0.15)
 
 if [[ "${1:-}" == "--worker" ]]; then
   if [[ $# -ne 2 ]]; then
