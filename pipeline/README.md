@@ -24,35 +24,71 @@ assets/3D_ENVIRONMENTS/studio/ # default studio environment
 
 ## Setup
 
-These commands assume Linux. PyTorch3D must be compiled against the same PyTorch, Python, and CUDA environment used by the pipeline. This repository includes its source in the sibling `pytorch3d/` directory. Install a C++ compiler and, for a CUDA build, the CUDA 11.8 toolkit (`nvcc`) before building. On Debian/Ubuntu, install the compiler with `sudo apt install build-essential`.
+Create a separate Conda environment for the renderer you plan to use. Both
+environments include the detector and search dependencies; only the selected
+renderer is installed. Commands below assume Linux and run from the repository
+root. Use the matching environment every time you launch the pipeline.
 
-From the repository root:
+### Mitsuba renderer environment
+
+Mitsuba supports CPU differentiation with `llvm_ad_rgb`. CUDA differentiation
+requires a compatible NVIDIA driver and a Mitsuba/Dr.Jit CUDA build.
 
 ```bash
-conda create -n pipeline python=3.10 -y
-conda activate pipeline
-conda install pytorch=2.1.2 torchvision=0.16.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
-conda install cuda-toolkit=11.8 -c nvidia -y
-python3 -m pip install --upgrade pip setuptools wheel
-python3 -m pip install -r pipeline/requirements.txt
-python3 -m pip install --no-build-isolation -e ./pytorch3d
+conda create -n pipeline-mitsuba python=3.10 -y
+conda activate pipeline-mitsuba
+python -m pip install --upgrade pip
+python -m pip install -r pipeline/requirements-mitsuba.txt
+python -c "import mitsuba, drjit, torch, torchvision, ultralytics; print('Mitsuba environment ready')"
 ```
 
-The PyTorch3D build can take several minutes. If you do not have an NVIDIA GPU, install the CPU builds instead of `pytorch-cuda`:
+### PyTorch3D renderer environment
+
+PyTorch3D must be built against the same Python, PyTorch, and CUDA versions in
+this environment. The project includes PyTorch3D source in `pytorch3d/`.
+Install a C++ compiler first; for the CUDA build, also install CUDA Toolkit
+11.8 (including `nvcc`). On Debian/Ubuntu:
+
+```bash
+sudo apt install build-essential
+```
+
+Then, from the repository root:
+
+```bash
+conda create -n pipeline-pytorch3d python=3.10 -y
+conda activate pipeline-pytorch3d
+conda install pytorch=2.1.2 torchvision=0.16.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+conda install cuda-toolkit=11.8 -c nvidia -y
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r pipeline/requirements-pytorch3d.txt
+python -m pip install --no-build-isolation -e ./pytorch3d
+python -c "import torch, torchvision, pytorch3d, ultralytics; print('PyTorch3D environment ready:', torch.__version__, torchvision.__version__, pytorch3d.__version__)"
+```
+
+The PyTorch3D build can take several minutes. For CPU-only use, replace the two
+CUDA Conda installs above with:
 
 ```bash
 conda install pytorch=2.1.2 torchvision=0.16.2 cpuonly -c pytorch -y
 ```
 
-Then install the Python dependencies and build PyTorch3D with the same pip commands above. The CPU renderer is slower. Do not use a PyTorch3D wheel built for another Python, PyTorch, or CUDA version. If you replace PyTorch or CUDA later, rebuild PyTorch3D.
+PyTorch3D's source build still needs a C++ compiler. Keep its Python, PyTorch,
+and CUDA versions matched; rebuild PyTorch3D if you change that stack.
 
-To verify the environment and start the pipeline from the repository root:
+### Run
+
+Activate the environment matching the `renderer` setting near the top of
+`pipeline/main.py`, then run:
 
 ```bash
-python -c "import torch, torchvision, pytorch3d, mitsuba; print(torch.__version__, torchvision.__version__, pytorch3d.__version__)"
 cd pipeline
 python main.py
 ```
+
+The default renderer is Mitsuba. Set `renderer = "pytorch3d"` to use the
+PyTorch3D environment. YOLO model weights download the first time a detector is
+loaded; YOLOE also downloads its text encoder.
 
 The checked-in `main.py` selects its renderer and search property in code. The detector can be set in `main.py` or with `--detector` as described below.
 

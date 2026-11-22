@@ -1,0 +1,17 @@
+#****Install PyTorch separately if you need a specific CUDA build. These defaults
+#work with the CPU renderer (llvm_ad_rgb) **** see README.md for CUDA.
+#*****
+#torch>=2.1
+#torchvision>=0.16
+
+
+# Shared pipeline: arrays, image IO, metrics, detector and remote-output helper.
+numpy
+Pillow
+openpyxl
+ultralytics>=8.4.0
+paramiko>=3.4
+python-dotenv>=1.0
+
+# Mitsuba 3 includes Dr.Jit as a dependency.
+mitsuba>=3.5

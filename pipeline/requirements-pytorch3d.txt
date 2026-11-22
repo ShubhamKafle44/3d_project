@@ -1,0 +1,21 @@
+# **** Install PyTorch/torchvision via Conda first so the CUDA build is selected
+# consistently.**** The documented environment uses PyTorch 2.1.2 / torchvision
+# 0.16.2; PyTorch3D is built separately from the repository's ./pytorch3d.
+
+
+# torch==2.1.2
+# torchvision==0.16.2
+
+# Shared pipeline: arrays, image IO, metrics, detector and remote-output helper.
+numpy==1.26.4
+Pillow
+openpyxl
+ultralytics>=8.4.0
+paramiko>=3.4
+python-dotenv>=1.0
+
+# PyTorch3D source-build dependencies; install PyTorch3D itself with
+# `python -m pip install --no-build-isolation -e ./pytorch3d`.
+fvcore
+iopath
+yacs
