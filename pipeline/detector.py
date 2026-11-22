@@ -7,8 +7,8 @@ import torch
 import torch.nn.functional as F
 from config import (
     DETECTOR_CONFIDENCE_THRESHOLD,
+    DETECTOR_INPUT_SIZES,
     DETECTOR_NAMES,
-    YOLO_INPUT_SIZE,
 )
 
 
@@ -184,6 +184,7 @@ class YOLODetector:
             raise ValueError(f"Unsupported YOLO detector: {model_name!r}")
         self.model_name = model_name
         self.device = torch.device(device)
+        self.input_size = DETECTOR_INPUT_SIZES[model_name]
         if model_name == "yoloe-26s-seg":
             self.yolo = YOLOE(f"{model_name}.pt")
             self.yolo.set_classes([target_class])
@@ -216,6 +217,7 @@ class YOLODetector:
         result = self.yolo.predict(
             image[..., ::-1],
             device=str(self.device),
+            imgsz=self.input_size,
             conf=DETECTOR_CONFIDENCE_THRESHOLD,
             verbose=False,
         )[0]
@@ -269,9 +271,11 @@ class YOLODetector:
         return self.classify(image)["target_prob"]
 
     def target_detection_loss(
-        self, image: torch.Tensor, input_size: int = YOLO_INPUT_SIZE
+        self, image: torch.Tensor, input_size: int | None = None
     ) -> torch.Tensor:
         """Max target-class score from YOLO's raw head, before box postprocessing."""
+        if input_size is None:
+            input_size = self.input_size
         if input_size < 1:
             raise ValueError("input_size must be positive")
         if image.ndim != 3:

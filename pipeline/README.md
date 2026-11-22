@@ -90,6 +90,11 @@ The default renderer is Mitsuba. Set `renderer = "pytorch3d"` to use the
 PyTorch3D environment. YOLO model weights download the first time a detector is
 loaded; YOLOE also downloads its text encoder.
 
+The square render resolution is selected from `DETECTOR_INPUT_SIZES` in
+`config.py` using the configured detector name. YOLO models currently use
+640×640 inputs; Faster R-CNN uses 800×800 renders, matching its standard
+minimum-side resize setting.
+
 The checked-in `main.py` selects its renderer and search property in code. The detector can be set in `main.py` or with `--detector` as described below.
 
 ## Choose the detector

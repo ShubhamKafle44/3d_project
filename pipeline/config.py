@@ -8,7 +8,17 @@ DETECTOR_NAMES = (
     "yoloe-26s-seg",
 )
 
-YOLO_INPUT_SIZE = 640
+# Square render/input size used by each detector. Faster R-CNN's standard
+# transform resizes a square image to its 800 px minimum side.
+DETECTOR_INPUT_SIZES = {
+    "fasterrcnn_resnet50_fpn_v2": 800,
+    "yolo26n": 640,
+    "yolo26s": 640,
+    "yolo26m": 640,
+    "yolo26l": 640,
+    "yolo26x": 640,
+    "yoloe-26s-seg": 640,
+}
 DETECTOR_CONFIDENCE_THRESHOLD = 0.05
 
 # Optional background/scene geometry (room, floor, props). None = plain background.
@@ -71,7 +81,6 @@ SEARCH = {
     "gradient_learning_rate": 1,
     "gradient_validate_every": 1,
     "gradient_snapshot_every": 2,
-    "gradient_image_size": 512,
 }
 
 PROPERTY_BOUNDS = {

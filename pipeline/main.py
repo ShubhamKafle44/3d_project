@@ -79,7 +79,7 @@ def main():
 
     success_threshold = config.SEARCH["success_threshold"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    scene_image_size = config.SEARCH["gradient_image_size"]
+    scene_image_size = config.DETECTOR_INPUT_SIZES[detector_name]
 
     if renderer not in {"pytorch3d", "mitsuba"}:
         raise ValueError("renderer must be 'pytorch3d' or 'mitsuba'")
@@ -119,6 +119,7 @@ def main():
     print(f"3D model : {model}")
     print(f"Environment: {environment}")
     print(f"Property : {property}")
+    print(f"Image size: {scene_image_size}x{scene_image_size}")
     print(f"Learning rate: {learning_rate:g}")
     print("Search mode: gradient")
     print(f"Folder: {out_dir.name}")
@@ -171,7 +172,7 @@ def main():
         property,
         epochs=epochs,
         learning_rate=learning_rate,
-        validate_every=config.SEARCH["gradient_validate_every"], # THIS BUILDS THE IMAGE AFTER EVERY [gradient_validate_every] value.
+        validate_every=config.SEARCH["gradient_validate_every"], 
         success_threshold=success_threshold,
         snapshot_dir=str(out_dir / "snapshots"),
         snapshot_every=config.SEARCH["gradient_snapshot_every"],
